@@ -37,7 +37,7 @@ def launch_napari_interface():
     """Launch the Napari-based desktop application"""
     print("\nLaunching Napari Desktop Application...")
     try:
-        from napari_analyzer import main as napari_main
+        from main_napari import main as napari_main
         napari_main()
         return True
     except ImportError as e:
@@ -50,7 +50,7 @@ def launch_web_interface():
     """Launch the basic web interface"""
     print("\nLaunching Basic Web Interface...")
     try:
-        from web_app import run_server
+        from simple_analyzer import run_server
         run_server(port=5000)
         return True
     except ImportError as e:
@@ -58,12 +58,17 @@ def launch_web_interface():
         return False
 
 def launch_enhanced_web_interface():
-    """Launch the enhanced web interface with advanced features"""
+    """Launch the enhanced web interface with Flask"""
     print("\nLaunching Enhanced Web Interface...")
     try:
-        from enhanced_web_app import run_enhanced_server
-        run_enhanced_server(port=5000)
-        return True
+        from scientific_analyzer import app
+        if app:
+            print("Starting Flask application...")
+            app.run(host='0.0.0.0', port=5000, debug=True)
+            return True
+        else:
+            print("Flask application not available")
+            return False
     except ImportError as e:
         print(f"Enhanced web interface not available: {e}")
         print("Falling back to simple analyzer...")
