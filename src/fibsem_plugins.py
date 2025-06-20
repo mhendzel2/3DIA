@@ -26,11 +26,29 @@ class ChimeraXIntegration:
     """Integration with ChimeraX for 3D molecular visualization and FIB-SEM correlation"""
     
     def __init__(self):
-        if FIXES_AVAILABLE:
-            self.chimerax_path = ChimeraXPathFix.find_chimerax_installation()
-        else:
-            self.chimerax_path = self._find_chimerax_installation_fallback()
+        """Initialize and find ChimeraX with a robust search order."""
+        self.chimerax_path = None
         self.temp_dir = tempfile.mkdtemp()
+        
+        try:
+            with open('config/config.json', 'r') as f:
+                config = json.load(f)
+                path_from_config = config.get("chimerax_path")
+                if path_from_config and os.path.exists(path_from_config):
+                    self.chimerax_path = path_from_config
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass # Config not found or invalid, proceed to auto-detect
+
+        if not self.chimerax_path and FIXES_AVAILABLE:
+            self.chimerax_path = ChimeraXPathFix.find_chimerax_installation()
+
+        if not self.chimerax_path:
+            self.chimerax_path = self._find_chimerax_installation_fallback()
+
+        if self.chimerax_path:
+            print(f"ChimeraX integration enabled. Path: {self.chimerax_path}")
+        else:
+            print("Warning: ChimeraX executable not found. 3D visualization will be disabled.")
 
     def _find_chimerax_installation_fallback(self):
         """Fallback method to locate ChimeraX installation if bug_fixes.py is not available"""

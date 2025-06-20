@@ -134,40 +134,25 @@ class ImageAligner:
                                    params: Dict) -> Dict[str, Any]:
         """Phase correlation alignment using FFT"""
         try:
-            # Proper phase correlation implementation
-            import numpy as np
-            from scipy.fft import fft2, ifft2
-
-            # Convert to numpy arrays
-            ref_np = np.array(reference)
-            target_np = np.array(target)
-
-            # Compute FFTs
-            G = fft2(ref_np)
-            F = fft2(target_np)
-
-            # Compute cross-power spectrum
-            R = (G * np.conj(F)) / (np.abs(G * np.conj(F)) + 1e-10)  # Add epsilon for stability
-            r = np.real(ifft2(R))
-
-            # Find the peak of the correlation
-            peak_coords = np.unravel_index(np.argmax(r), r.shape)
-            shifts = np.array(peak_coords)
-            center = np.array(r.shape) / 2
+            from bug_fixes import PhaseCorrelationFix
+            dx, dy, score = PhaseCorrelationFix.implement_phase_correlation(reference, target)
             
-            shift_vector = shifts - center
-            
+            if score == 0 and (dx == 0 and dy == 0):
+                # Fallback if phase correlation fails
+                return self._cross_correlation_alignment(reference, target, params)
+
             # Apply the calculated shift
-            aligned_image_np = self._apply_shift_numpy(target_np, int(shift_vector[1]), int(shift_vector[0]))
+            aligned_image = self._apply_shift(target, dx, dy)
             
             return {
-                'aligned_image': aligned_image_np.tolist(),
-                'shift_vector': (int(shift_vector[1]), int(shift_vector[0])),
-                'alignment_score': np.max(r)
+                'aligned_image': aligned_image,
+                'shift_vector': (dx, dy),
+                'alignment_score': score
             }
+            
         except Exception as e:
             print(f"Phase correlation failed, using fallback: {e}")
-            # Fallback to cross-correlation ONLY if FFT fails
+            # Fallback to cross-correlation if any error occurs
             return self._cross_correlation_alignment(reference, target, params)
 
     def _apply_shift_numpy(self, image, dx: int, dy: int):
