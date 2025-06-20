@@ -3,7 +3,12 @@ Visualization Widget for Scientific Image Analyzer
 Provides 3D rendering controls and visualization options
 """
 
-import numpy as np
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    print("Warning: NumPy not available. Visualization widget functionality will be limited.")
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QSlider, QSpinBox, QDoubleSpinBox, 
                              QComboBox, QGroupBox, QCheckBox, QColorDialog,
@@ -541,8 +546,13 @@ class VisualizationWidget(QWidget):
                     
             # Update data range for controls
             if isinstance(self.current_layer, Image) and self.current_layer.data is not None:
-                data_min = int(np.min(self.current_layer.data))
-                data_max = int(np.max(self.current_layer.data))
+                if NUMPY_AVAILABLE:
+                    data_min = int(np.min(self.current_layer.data))
+                    data_max = int(np.max(self.current_layer.data))
+                else:
+                    data_flat = [pixel for row in self.current_layer.data for pixel in row]
+                    data_min = int(min(data_flat))
+                    data_max = int(max(data_flat))
                 
                 self.contrast_min.setRange(data_min, data_max)
                 self.contrast_max.setRange(data_min, data_max)
@@ -560,6 +570,10 @@ class VisualizationWidget(QWidget):
             
     def auto_contrast(self):
         """Automatically set contrast limits based on data percentiles"""
+        if not NUMPY_AVAILABLE:
+            self.show_error("NumPy is required for auto-contrast functionality.")
+            return
+
         if not self.current_layer or not isinstance(self.current_layer, Image):
             return
             
@@ -578,6 +592,10 @@ class VisualizationWidget(QWidget):
             
     def apply_percentile_clipping(self):
         """Apply percentile-based clipping"""
+        if not NUMPY_AVAILABLE:
+            self.show_error("NumPy is required for percentile clipping functionality.")
+            return
+            
         if not self.current_layer or not isinstance(self.current_layer, Image):
             return
             
@@ -770,6 +788,19 @@ class VisualizationWidget(QWidget):
         else:
             self.layer_combo.addItem("No layers available")
             
+    def show_error(self, message):
+        """Display error message to user"""
+        print(f"VisualizationWidget Error: {message}")
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Warning)
+            msg.setWindowTitle("Visualization Widget")
+            msg.setText(message)
+            msg.exec()
+        except:
+            pass
+    
     def cleanup(self):
         """Cleanup resources"""
         self.update_timer.stop()
