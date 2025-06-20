@@ -14,67 +14,68 @@ from typing import List, Dict, Any, Tuple, Optional
 import subprocess
 from pathlib import Path
 
+try:
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from bug_fixes import ChimeraXPathFix, MRCExportFix
+    FIXES_AVAILABLE = True
+except ImportError:
+    FIXES_AVAILABLE = False
+
 class ChimeraXIntegration:
     """Integration with ChimeraX for 3D molecular visualization and FIB-SEM correlation"""
     
     def __init__(self):
-        self.chimerax_path = self.find_chimerax_installation()
+        if FIXES_AVAILABLE:
+            self.chimerax_path = ChimeraXPathFix.find_chimerax_installation()
+        else:
+            self.chimerax_path = self._find_chimerax_installation_fallback()
         self.temp_dir = tempfile.mkdtemp()
-        
-    def find_chimerax_installation(self):
-        """Locate ChimeraX installation"""
+
+    def _find_chimerax_installation_fallback(self):
+        """Fallback method to locate ChimeraX installation if bug_fixes.py is not available"""
         possible_paths = [
             "/Applications/ChimeraX.app/Contents/bin/ChimeraX",  # macOS
             "C:\\Program Files\\ChimeraX\\bin\\ChimeraX.exe",    # Windows
             "/usr/bin/chimerax",                                 # Linux
             "/opt/chimerax/bin/chimerax"                        # Linux alt
         ]
-        
+
         for path in possible_paths:
             if os.path.exists(path):
                 return path
-        
-        # Try to find in PATH
-        try:
-            result = subprocess.run(['which', 'chimerax'], capture_output=True, text=True)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except:
-            pass
-            
         return None
     
     def export_volume_to_chimerax(self, volume_data, filename="fibsem_volume.mrc"):
         """Export FIB-SEM volume data to ChimeraX compatible format"""
-        try:
-            filepath = os.path.join(self.temp_dir, filename)
-            
-            # Create simple MRC-like format for ChimeraX
-            with open(filepath, 'wb') as f:
-                # Simple header for volume data
-                height = len(volume_data)
-                width = len(volume_data[0]) if height > 0 else 0
-                depth = 1
-                
-                # Write basic MRC header information
-                f.write(width.to_bytes(4, 'little'))      # nx
-                f.write(height.to_bytes(4, 'little'))     # ny  
-                f.write(depth.to_bytes(4, 'little'))      # nz
-                f.write((2).to_bytes(4, 'little'))        # mode (2 = float)
-                
-                # Padding for MRC header (256 bytes total)
-                f.write(b'\x00' * (256 - 16))
-                
-                # Write volume data
-                for row in volume_data:
-                    for pixel in row:
-                        f.write(int(pixel).to_bytes(4, 'little'))
-            
-            return filepath
-            
-        except Exception as e:
-            print(f"ChimeraX export error: {e}")
-            return None
+        filepath = os.path.join(self.temp_dir, filename)
+        if FIXES_AVAILABLE:
+            success, message = MRCExportFix.export_proper_mrc(volume_data, filepath)
+            if success:
+                print(f"Volume exported as {message} to {filepath}")
+                return filepath
+            else:
+                print(f"MRC export failed: {message}")
+                return None
+        else:
+            print("Warning: MRCExportFix not found. Using basic export.")
+            # Fallback to simple export if bug_fixes not available
+            try:
+                with open(filepath, 'wb') as f:
+                    height = len(volume_data)
+                    width = len(volume_data[0]) if height > 0 else 0
+                    f.write(width.to_bytes(4, 'little'))
+                    f.write(height.to_bytes(4, 'little'))
+                    f.write((1).to_bytes(4, 'little'))
+                    f.write((2).to_bytes(4, 'little'))
+                    f.write(b'\x00' * (256 - 16))
+                    for row in volume_data:
+                        for pixel in row:
+                            f.write(int(pixel).to_bytes(4, 'little'))
+                return filepath
+            except Exception as e:
+                print(f"Basic MRC export error: {e}")
+                return None
     
     def create_chimerax_script(self, volume_path, segmentation_path=None):
         """Create ChimeraX script for FIB-SEM analysis"""
@@ -219,6 +220,9 @@ class TomoSliceAnalyzer:
     def get_orthogonal_slices(self, z_index, y_index, x_index):
         """Get orthogonal slices for 3D navigation"""
         try:
+            if not self.current_volume:
+                return None
+                
             dims = self.get_volume_dimensions()
             
             # XY slice (normal view)
@@ -432,7 +436,7 @@ class MembraneSegmenter:
                           image[i-1][j-1] - 2*image[i-1][j] - image[i-1][j+1])
                     
                     gradient_magnitude = math.sqrt(gx*gx + gy*gy)
-                    edges[i][j] = gradient_magnitude
+                    edges[i][j] = int(gradient_magnitude)
             
             # Threshold edges to find membranes
             edge_threshold = sum(sum(row) for row in edges) / (height * width) * 1.5
@@ -603,7 +607,7 @@ class GPU_ImageProcessor:
                                 ni, nj = i + di, j + dj
                                 if 0 <= ni < height and 0 <= nj < width:
                                     min_val = min(min_val, image[ni][nj])
-                        eroded[i][j] = min_val if min_val != float('inf') else 0
+                        eroded[i][j] = int(min_val) if min_val != float('inf') else 0
                 
                 if operation == "erosion":
                     return eroded

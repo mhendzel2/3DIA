@@ -20,6 +20,14 @@ from scientific_analyzer import (
 )
 
 try:
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from bug_fixes import TIFFExportFix
+    FIXES_AVAILABLE = True
+except ImportError:
+    FIXES_AVAILABLE = False
+
+try:
     from fibsem_plugins import FIBSEMAnalyzer
     FIBSEM_AVAILABLE = True
 except ImportError:
@@ -181,7 +189,7 @@ class BatchProcessor:
                 
                 if method == 'cellpose':
                     diameter = seg_config.get('diameter', 30)
-                    labels = CellposeSegmentation.segment_cells(current_image, diameter)
+                    labels = GradientWatershedSegmentation.segment_cells(current_image, diameter)
                 elif method == 'stardist':
                     labels = StarDistSegmentation.segment_nuclei(current_image)
                 elif method == 'fibsem_comprehensive' and FIBSEM_AVAILABLE:
@@ -259,7 +267,7 @@ class BatchProcessor:
                                 sum_val += image[ni][nj]
                                 count += 1
                     
-                    filtered[i][j] = sum_val / count if count > 0 else image[i][j]
+                    filtered[i][j] = int(sum_val / count) if count > 0 else image[i][j]
             
             return filtered
         except:
@@ -297,8 +305,16 @@ class BatchProcessor:
             
             if export_config.get('mask_tiff', False) and 'labels' in layers:
                 tiff_path = os.path.join(export_dir, f"{base_filename}_mask.tiff")
-                self._export_mask_simple(layers['labels'], tiff_path)
-                exports['mask_tiff'] = tiff_path
+                if FIXES_AVAILABLE:
+                    success, method = TIFFExportFix.export_proper_tiff(layers['labels'], tiff_path)
+                    if success:
+                        print(f"Exported mask as {method} to {tiff_path}")
+                        exports['mask_tiff'] = tiff_path
+                    else:
+                        print(f"TIFF export failed: {method}")
+                else:
+                    self._export_mask_simple(layers['labels'], tiff_path)
+                    exports['mask_tiff'] = tiff_path.replace('.tiff', '.txt')
             
             if export_config.get('summary_json', True):
                 json_path = os.path.join(export_dir, f"{base_filename}_summary.json")
