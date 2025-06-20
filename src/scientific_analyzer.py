@@ -320,6 +320,9 @@ class RegionPropsAnalysis:
         # Perimeter (simplified)
         perimeter = RegionPropsAnalysis._calculate_perimeter(labels, target_label)
         
+        bbox_height = max_y - min_y
+        bbox_width = max_x - min_x
+        
         measurements = {
             'label': target_label,
             'area': area,
@@ -330,7 +333,7 @@ class RegionPropsAnalysis:
             'bbox_max_x': max_x,
             'bbox_max_y': max_y,
             'perimeter': perimeter,
-            'aspect_ratio': (max_x - min_x) / (max_y - min_y) if max_y != min_y else 1.0
+            'aspect_ratio': bbox_width / bbox_height if bbox_height > 0 else float('inf') if bbox_width > 0 else 1.0
         }
         
         if intensity_image and intensities:
@@ -792,7 +795,7 @@ if HAS_FLASK:
     
     @app.route('/track', methods=['POST'])
     def track_objects():
-        """Perform tracking"""
+        """Perform tracking on a real timelapse sequence"""
         data = request.get_json()
         session_id = data.get('session_id')
         
@@ -800,20 +803,20 @@ if HAS_FLASK:
             return jsonify({'error': 'Invalid session'}), 400
         
         try:
-            image = analysis_cache[session_id]['original_image']
+            session = analysis_cache[session_id]
             
-            # Create synthetic time series
-            time_series = []
-            for t in range(5):
-                # Simulate movement by shifting
-                shifted_image = shift_image(image, t*3, t*2)
-                labels = GradientWatershedSegmentation.segment_cells(shifted_image)
-                time_series.append(labels)
+            if 'timelapse_data' not in session or len(session['timelapse_data']) < 2:
+                return jsonify({
+                    'error': 'Tracking requires a timelapse sequence with at least 2 frames.',
+                    'suggestion': 'Please upload multiple image files to create a sequence.'
+                }), 400
+
+            time_series_labels = session['timelapse_data']
             
-            # Track objects
-            tracks = BTrackTracking.track_objects(time_series)
+            # Track objects using the BTrackTracking module
+            tracks = BTrackTracking.track_objects(time_series_labels)
             
-            # Prepare track data
+            # Prepare track data for response
             track_data = []
             for track in tracks:
                 if len(track['frames']) > 1:
@@ -824,12 +827,12 @@ if HAS_FLASK:
                         'duration': len(track['frames'])
                     })
             
-            analysis_cache[session_id]['results']['tracking'] = track_data
+            session['results']['tracking'] = track_data
             
             return jsonify({
                 'success': True,
                 'track_count': len(track_data),
-                'tracks': track_data[:10]
+                'tracks': track_data[:10]  # Return a sample of tracks
             })
             
         except Exception as e:
