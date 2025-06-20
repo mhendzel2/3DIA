@@ -6,14 +6,14 @@ Provides statistical analysis and colocalization utilities
 import numpy as np
 from typing import Dict, Tuple, List, Optional, Union
 from scipy import ndimage, stats
-from skimage import measure, filters, morphology
+from skimage import measure, morphology
 import pandas as pd
 
 def calculate_object_statistics(labeled_image: np.ndarray, 
                                intensity_image: Optional[np.ndarray] = None,
                                properties: Optional[List[str]] = None) -> Dict:
     """
-    Calculate comprehensive statistics for labeled objects
+    Calculate comprehensive statistics for labeled objects including advanced morphological properties
     
     Args:
         labeled_image: Labeled image with object regions
@@ -25,9 +25,9 @@ def calculate_object_statistics(labeled_image: np.ndarray,
     """
     if properties is None:
         properties = [
-            'label', 'area', 'centroid', 'bbox', 'perimeter',
+            'label', 'area', 'centroid', 'bbox', 'perimeter', 'convex_area',
             'major_axis_length', 'minor_axis_length', 'eccentricity',
-            'orientation', 'solidity', 'extent'
+            'orientation', 'solidity', 'extent', 'feret_diameter_max'
         ]
     
     # Add intensity properties if intensity image is provided
@@ -39,50 +39,47 @@ def calculate_object_statistics(labeled_image: np.ndarray,
         properties.extend(intensity_props)
     
     try:
-        # Calculate region properties
-        if intensity_image is not None:
-            regions = measure.regionprops(labeled_image, intensity_image)
-        else:
-            regions = measure.regionprops(labeled_image)
+        # Calculate region properties using skimage
+        regions = measure.regionprops_table(
+            labeled_image,
+            intensity_image=intensity_image,
+            properties=properties
+        )
         
-        # Extract statistics
-        stats_dict = {}
+        df = pd.DataFrame(regions)
         
-        for prop in properties:
-            if hasattr(regions[0], prop):
-                values = []
-                for region in regions:
-                    val = getattr(region, prop)
-                    if isinstance(val, (tuple, list, np.ndarray)):
-                        # For multi-dimensional properties, store as arrays
-                        values.append(val)
-                    else:
-                        values.append(val)
-                stats_dict[prop] = values
+        # Calculate custom Circularity (requires perimeter and area)
+        if 'area' in df and 'perimeter' in df:
+            df['circularity'] = df.apply(
+                lambda row: (4 * np.pi * row['area']) / (row['perimeter']**2) if row['perimeter'] > 0 else 0,
+                axis=1
+            )
+        
+        stats_dict = df.to_dict('list')
         
         # Calculate additional derived statistics
         if 'area' in stats_dict:
             areas = np.array(stats_dict['area'])
             stats_dict.update({
-                'total_area': np.sum(areas),
-                'mean_area': np.mean(areas),
-                'std_area': np.std(areas),
-                'min_area': np.min(areas),
-                'max_area': np.max(areas),
-                'median_area': np.median(areas)
+                'total_area': float(np.sum(areas)),
+                'mean_area': float(np.mean(areas)),
+                'std_area': float(np.std(areas)),
+                'min_area': float(np.min(areas)),
+                'max_area': float(np.max(areas)),
+                'median_area': float(np.median(areas))
             })
         
         if 'mean_intensity' in stats_dict:
             intensities = np.array(stats_dict['mean_intensity'])
             stats_dict.update({
-                'mean_object_intensity': np.mean(intensities),
-                'std_object_intensity': np.std(intensities),
-                'min_object_intensity': np.min(intensities),
-                'max_object_intensity': np.max(intensities)
+                'mean_object_intensity': float(np.mean(intensities)),
+                'std_object_intensity': float(np.std(intensities)),
+                'min_object_intensity': float(np.min(intensities)),
+                'max_object_intensity': float(np.max(intensities))
             })
         
         # Object count
-        stats_dict['object_count'] = len(regions)
+        stats_dict['object_count'] = len(df)
         
         return stats_dict
         
@@ -223,6 +220,7 @@ def costes_threshold(image1: np.ndarray, image2: np.ndarray) -> Tuple[float, flo
     
     # Use Otsu's method as approximation
     try:
+        from skimage import filters
         thresh1 = filters.threshold_otsu(image1)
         thresh2 = filters.threshold_otsu(image2)
         return float(thresh1), float(thresh2)
@@ -232,7 +230,7 @@ def costes_threshold(image1: np.ndarray, image2: np.ndarray) -> Tuple[float, flo
         thresh2 = np.percentile(image2, 75)
         return float(thresh1), float(thresh2)
 
-def calculate_intensity_statistics(image: np.ndarray, mask: Optional[np.ndarray] = None) -> Dict[str, float]:
+def calculate_intensity_statistics(image: np.ndarray, mask: Optional[np.ndarray] = None) -> Dict:
     """
     Calculate comprehensive intensity statistics for an image
     
@@ -269,7 +267,7 @@ def calculate_intensity_statistics(image: np.ndarray, mask: Optional[np.ndarray]
     
     return stats_dict
 
-def analyze_spatial_distribution(coordinates: np.ndarray) -> Dict[str, float]:
+def analyze_spatial_distribution(coordinates: np.ndarray) -> Dict:
     """
     Analyze spatial distribution of points/objects
     
@@ -467,8 +465,8 @@ def create_analysis_report(results: Dict, output_format: str = 'dict') -> Union[
         raise ValueError(f"Unsupported output format: {output_format}")
 
 def batch_analysis(image_list: List[np.ndarray], 
-                  analysis_functions: List[callable],
-                  function_kwargs: Optional[List[Dict]] = None) -> List[Dict]:
+                  analysis_functions: List,
+                  function_kwargs: Optional[List[Dict]] = None) -> List:
     """
     Perform batch analysis on multiple images
     
@@ -496,13 +494,13 @@ def batch_analysis(image_list: List[np.ndarray],
                 image_results[function_name] = result
             except Exception as e:
                 function_name = func.__name__
-                image_results[function_name] = {'error': str(e)}
+                pass
         
         results.append(image_results)
     
     return results
 
-def quality_assessment(image: np.ndarray) -> Dict[str, float]:
+def quality_assessment(image: np.ndarray) -> Dict:
     """
     Assess image quality metrics
     
@@ -518,7 +516,8 @@ def quality_assessment(image: np.ndarray) -> Dict[str, float]:
         # Signal-to-noise ratio estimation
         if image.ndim == 2:
             # Use Laplacian variance as sharpness measure
-            laplacian_var = ndimage.generic_laplacian(image.astype(float), np.ones((3, 3))).var()
+            laplacian = ndimage.laplace(image.astype(float))
+            laplacian_var = laplacian.var()
             metrics['sharpness'] = float(laplacian_var)
         
         # Dynamic range
@@ -535,7 +534,8 @@ def quality_assessment(image: np.ndarray) -> Dict[str, float]:
         # Histogram entropy (measure of information content)
         hist, _ = np.histogram(image, bins=256, density=True)
         hist = hist[hist > 0]  # Remove zero bins
-        entropy = -np.sum(hist * np.log2(hist))
+        hist_safe = hist.astype(float)
+        entropy = float(-np.sum(hist_safe * np.log2(np.maximum(hist_safe, 1e-10))))
         metrics['entropy'] = float(entropy)
         
         # Noise estimation (using high-frequency content)

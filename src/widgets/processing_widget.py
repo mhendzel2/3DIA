@@ -12,10 +12,44 @@ import napari
 from napari.layers import Image
 
 from scipy.ndimage import gaussian_filter, median_filter, binary_opening, binary_closing
-from skimage import filters, morphology, exposure
+from scipy.signal import convolve
+from skimage import morphology
 from skimage.restoration import denoise_bilateral
+from skimage.filters import threshold_local
 
 from utils.image_utils import validate_image_layer, estimate_processing_time
+
+try:
+    from advanced_analysis import AIDenoising
+    ADVANCED_DENOISING_AVAILABLE = True
+except ImportError:
+    ADVANCED_DENOISING_AVAILABLE = False
+
+class DeconvolutionThread(QThread):
+    progress = pyqtSignal(int)
+    finished = pyqtSignal(np.ndarray)
+    error = pyqtSignal(str)
+
+    def __init__(self, image, psf, iterations):
+        super().__init__()
+        self.image = image.astype(np.float64)
+        self.psf = psf
+        self.iterations = iterations
+
+    def run(self):
+        try:
+            estimate = np.copy(self.image)
+            psf_flipped = np.flip(self.psf)
+            
+            for i in range(self.iterations):
+                relative_blur = self.image / (convolve(estimate, self.psf, mode='same') + 1e-10)
+                correction = convolve(relative_blur, psf_flipped, mode='same')
+                estimate *= correction
+                self.progress.emit(int(100 * (i + 1) / self.iterations))
+            
+            self.finished.emit(estimate)
+        except Exception as e:
+            self.error.emit(str(e))
 
 class ProcessingWidget(QWidget):
     """Widget for image processing operations"""
@@ -138,6 +172,27 @@ class ProcessingWidget(QWidget):
         
         threshold_layout.addLayout(auto_layout)
         
+        # Adaptive threshold
+        adaptive_layout = QHBoxLayout()
+        adaptive_layout.addWidget(QLabel("Block size:"))
+        self.adaptive_block_size = QSpinBox()
+        self.adaptive_block_size.setRange(3, 101)
+        self.adaptive_block_size.setValue(35)
+        self.adaptive_block_size.setSingleStep(2)
+        adaptive_layout.addWidget(self.adaptive_block_size)
+        
+        adaptive_layout.addWidget(QLabel("Offset:"))
+        self.adaptive_offset = QSpinBox()
+        self.adaptive_offset.setRange(-50, 50)
+        self.adaptive_offset.setValue(10)
+        adaptive_layout.addWidget(self.adaptive_offset)
+        
+        self.apply_adaptive_btn = QPushButton("Apply Adaptive (Local)")
+        self.apply_adaptive_btn.clicked.connect(self.apply_adaptive_threshold)
+        adaptive_layout.addWidget(self.apply_adaptive_btn)
+        
+        threshold_layout.addLayout(adaptive_layout)
+        
         threshold_group.setLayout(threshold_layout)
         layout.addWidget(threshold_group)
         
@@ -221,6 +276,60 @@ class ProcessingWidget(QWidget):
         morph_group.setLayout(morph_layout)
         layout.addWidget(morph_group)
         
+        deconv_group = QGroupBox("Deconvolution")
+        deconv_layout = QVBoxLayout(deconv_group)
+        
+        deconv_layout.addWidget(QLabel("PSF Sigma (Gaussian approximation):"))
+        self.psf_sigma = QDoubleSpinBox()
+        self.psf_sigma.setRange(0.5, 5.0)
+        self.psf_sigma.setValue(1.5)
+        deconv_layout.addWidget(self.psf_sigma)
+        
+        deconv_layout.addWidget(QLabel("Iterations:"))
+        self.deconv_iterations = QSpinBox()
+        self.deconv_iterations.setRange(1, 100)
+        self.deconv_iterations.setValue(10)
+        deconv_layout.addWidget(self.deconv_iterations)
+        
+        self.apply_deconv_btn = QPushButton("Apply Richardson-Lucy")
+        self.apply_deconv_btn.clicked.connect(self.apply_deconvolution)
+        deconv_layout.addWidget(self.apply_deconv_btn)
+        
+        deconv_group.setLayout(deconv_layout)
+        layout.addWidget(deconv_group)
+        
+        if ADVANCED_DENOISING_AVAILABLE:
+            denoise_group = QGroupBox("Advanced Denoising")
+            denoise_layout = QVBoxLayout()
+
+            # Bilateral Filter (advanced)
+            bilateral_adv_layout = QHBoxLayout()
+            bilateral_adv_layout.addWidget(QLabel("Bilateral σ (spatial):"))
+            self.bilateral_spatial_sigma = QDoubleSpinBox()
+            self.bilateral_spatial_sigma.setRange(0.1, 20.0)
+            self.bilateral_spatial_sigma.setValue(5.0)
+            bilateral_adv_layout.addWidget(self.bilateral_spatial_sigma)
+            
+            self.apply_bilateral_adv_btn = QPushButton("Apply Bilateral Filter")
+            self.apply_bilateral_adv_btn.clicked.connect(self.apply_advanced_bilateral_filter)
+            bilateral_adv_layout.addWidget(self.apply_bilateral_adv_btn)
+            denoise_layout.addLayout(bilateral_adv_layout)
+
+            nlm_layout = QHBoxLayout()
+            nlm_layout.addWidget(QLabel("NLM Denoise Strength (h):"))
+            self.nlm_h = QDoubleSpinBox()
+            self.nlm_h.setRange(1.0, 50.0)
+            self.nlm_h.setValue(10.0)
+            nlm_layout.addWidget(self.nlm_h)
+
+            self.apply_nlm_btn = QPushButton("Apply Non-local Means")
+            self.apply_nlm_btn.clicked.connect(self.apply_nlm_filter)
+            nlm_layout.addWidget(self.apply_nlm_btn)
+            denoise_layout.addLayout(nlm_layout)
+
+            denoise_group.setLayout(denoise_layout)
+            layout.addWidget(denoise_group)
+        
         # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -272,7 +381,11 @@ class ProcessingWidget(QWidget):
                 data = gaussian_filter(data, sigma=self.gauss_sigma.value())
                 
             if self.gamma_value.value() != 1.0:
-                data = exposure.adjust_gamma(data, gamma=self.gamma_value.value())
+                try:
+                    from skimage import exposure
+                    data = exposure.adjust_gamma(data, gamma=self.gamma_value.value())
+                except ImportError:
+                    pass
                 
             # Update or create preview layer
             preview_name = f"{layer.name}_preview"
@@ -422,6 +535,7 @@ class ProcessingWidget(QWidget):
             method = self.auto_method_combo.currentText().lower()
             
             # Get threshold value using skimage filters
+            from skimage import filters
             if method == "otsu":
                 threshold = filters.threshold_otsu(layer.data)
             elif method == "li":
@@ -450,6 +564,37 @@ class ProcessingWidget(QWidget):
             
         except Exception as e:
             self.show_error(f"Auto threshold failed: {str(e)}")
+            
+    def apply_adaptive_threshold(self):
+        """Apply adaptive threshold to the selected layer."""
+        layer = self.get_current_layer()
+        if not validate_image_layer(layer):
+            self.show_error("Please select a valid image layer to apply adaptive threshold.")
+            return
+
+        try:
+            # Parameters for adaptive thresholding
+            block_size = self.adaptive_block_size.value()
+            offset = self.adaptive_offset.value()
+
+            if block_size % 2 == 0:
+                block_size += 1
+
+            binary_adaptive = layer.data > threshold_local(layer.data, block_size, offset=offset)
+            
+            adaptive_data = binary_adaptive.astype(np.uint8) * 255
+            
+            new_layer = self.viewer.add_image(
+                adaptive_data,
+                name=f"{layer.name}_adaptive_thresh",
+                scale=layer.scale,
+                colormap='gray'
+            )
+            
+            print(f"Applied adaptive threshold to {layer.name}")
+
+        except Exception as e:
+            self.show_error(f"Adaptive threshold failed: {str(e)}")
             
     def apply_gamma_correction(self):
         """Apply gamma correction to selected layer"""
@@ -603,6 +748,96 @@ class ProcessingWidget(QWidget):
         msg.setText(message)
         msg.exec()
         
+    def apply_advanced_bilateral_filter(self):
+        """Apply advanced bilateral filter using AIDenoising"""
+        if not ADVANCED_DENOISING_AVAILABLE:
+            self.show_error("Advanced denoising not available. Please check advanced_analysis.py")
+            return
+            
+        layer = self.get_current_layer()
+        if not validate_image_layer(layer):
+            self.show_error("Please select a valid image layer.")
+            return
+            
+        try:
+            self.progress_bar.setVisible(True)
+            sigma_spatial = self.bilateral_spatial_sigma.value()
+            denoised_data = AIDenoising.bilateral_filter_denoising(layer.data, sigma_spatial=sigma_spatial)
+            
+            new_layer = self.viewer.add_image(
+                denoised_data, 
+                name=f"{layer.name}_bilateral_adv", 
+                scale=layer.scale,
+                colormap=layer.colormap.name if hasattr(layer.colormap, 'name') else 'gray'
+            )
+            
+            print(f"Applied advanced bilateral filter to {layer.name}")
+            
+        except Exception as e:
+            self.show_error(f"Advanced bilateral filter failed: {str(e)}")
+        finally:
+            self.progress_bar.setVisible(False)
+
+    def apply_nlm_filter(self):
+        """Apply non-local means filter using AIDenoising"""
+        if not ADVANCED_DENOISING_AVAILABLE:
+            self.show_error("Advanced denoising not available. Please check advanced_analysis.py")
+            return
+            
+        layer = self.get_current_layer()
+        if not validate_image_layer(layer):
+            self.show_error("Please select a valid image layer.")
+            return
+            
+        try:
+            self.progress_bar.setVisible(True)
+            h = self.nlm_h.value()
+            denoised_data = AIDenoising.non_local_means_denoising(layer.data, h=h)
+            
+            new_layer = self.viewer.add_image(
+                denoised_data, 
+                name=f"{layer.name}_nlm", 
+                scale=layer.scale,
+                colormap=layer.colormap.name if hasattr(layer.colormap, 'name') else 'gray'
+            )
+            
+            print(f"Applied non-local means denoising to {layer.name}")
+            
+        except Exception as e:
+            self.show_error(f"Non-local means filter failed: {str(e)}")
+        finally:
+            self.progress_bar.setVisible(False)
+
+    def apply_deconvolution(self):
+        layer = self.get_current_layer()
+        if not validate_image_layer(layer):
+            self.show_error("Select a valid image layer for deconvolution.")
+            return
+
+        sigma = self.psf_sigma.value()
+        psf_size = int(sigma * 4) + 1
+        
+        psf = np.zeros([psf_size] * layer.ndim)
+        center = tuple([s // 2 for s in psf.shape])
+        psf[center] = 1
+        psf = gaussian_filter(psf.astype(float), sigma=sigma)
+        psf /= psf.sum()
+
+        iterations = self.deconv_iterations.value()
+        
+        self.deconv_thread = DeconvolutionThread(layer.data, psf, iterations)
+        self.deconv_thread.finished.connect(self.on_deconv_finished)
+        self.deconv_thread.error.connect(self.show_error)
+        self.deconv_thread.progress.connect(self.progress_bar.setValue)
+        
+        self.progress_bar.setVisible(True)
+        self.deconv_thread.start()
+
+    def on_deconv_finished(self, deconvolved_image):
+        self.progress_bar.setVisible(False)
+        layer = self.get_current_layer()
+        self.viewer.add_image(deconvolved_image, name=f"{layer.name}_deconvolved", scale=layer.scale)
+    
     def cleanup(self):
         """Cleanup resources"""
         if self.current_preview_layer and self.current_preview_layer in self.viewer.layers:

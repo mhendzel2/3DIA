@@ -16,7 +16,7 @@ import napari
 from napari.layers import Image
 
 from scipy.stats import pearsonr, spearmanr
-from skimage import filters, measure
+from skimage import measure
 from utils.analysis_utils import (calculate_colocalization_coefficients, 
                                  costes_threshold, manders_coefficients)
 
@@ -117,7 +117,7 @@ class ColocalizationThread(QThread):
             # Calculate colocalized volume/area
             if self.parameters.get('use_threshold', False):
                 colocalized_voxels = np.sum(combined_mask)
-                total_voxels = np.sum(mask1 | mask2)
+                total_voxels = np.sum(np.logical_or(mask1, mask2))
                 if total_voxels > 0:
                     colocalization_percentage = (colocalized_voxels / total_voxels) * 100
                 else:
@@ -162,73 +162,62 @@ class PlotWidget(QWidget):
         self.canvas.draw()
         
     def plot_colocalization_analysis(self, results):
-        """Plot colocalization analysis results"""
+        """Plot colocalization analysis results with 2D heatmap and regression line."""
         self.figure.clear()
-        
+
         intensity_data = results.get('intensity_data', {})
         if not intensity_data:
+            self.canvas.draw()
             return
-            
+
         pixels1 = intensity_data['channel1']
         pixels2 = intensity_data['channel2']
-        
-        if len(pixels1) == 0 or len(pixels2) == 0:
+
+        if len(pixels1) < 2 or len(pixels2) < 2:
+            self.canvas.draw()
             return
-            
+
         # Create subplots
-        gs = self.figure.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
-        
-        # 2D scatter plot
-        ax1 = self.figure.add_subplot(gs[0, 0])
-        scatter = ax1.scatter(pixels1, pixels2, alpha=0.5, s=1)
+        gs = self.figure.add_gridspec(2, 2, hspace=0.4, wspace=0.3)
+        ax1 = self.figure.add_subplot(gs[0, :])  # Main plot spans top row
+        ax2 = self.figure.add_subplot(gs[1, 0])  # Histogram 1
+        ax3 = self.figure.add_subplot(gs[1, 1])  # Histogram 2
+
+        try:
+            from matplotlib.colors import LogNorm
+            heatmap = ax1.hist2d(pixels1, pixels2, bins=100, norm=LogNorm(), cmap='viridis')
+            self.figure.colorbar(heatmap[3], ax=ax1, label='Point Density')
+        except ImportError:
+            ax1.scatter(pixels1, pixels2, alpha=0.1, s=1)
+
+        if len(pixels1) > 1:
+            from scipy import stats
+            slope, intercept, r_value, _, _ = stats.linregress(pixels1, pixels2)
+            line = slope * np.array(pixels1) + intercept
+            ax1.plot(pixels1, line, 'r-', linewidth=1, label=f'y={slope:.2f}x+{intercept:.2f}')
+
         ax1.set_xlabel('Channel 1 Intensity')
         ax1.set_ylabel('Channel 2 Intensity')
-        ax1.set_title('Intensity Correlation')
+        ax1.set_title('Intensity Correlation Heatmap')
+        ax1.legend()
         
-        # Add correlation coefficient to plot
         pearson_r = results.get('pearson_correlation', 0)
         ax1.text(0.05, 0.95, f'Pearson r = {pearson_r:.3f}', 
                 transform=ax1.transAxes, verticalalignment='top',
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
+
         # Channel 1 histogram
-        ax2 = self.figure.add_subplot(gs[0, 1])
-        ax2.hist(pixels1, bins=50, alpha=0.7, color='red', label='Channel 1')
+        ax2.hist(intensity_data['image1_full'].flatten(), bins=100, alpha=0.7, color='red', label='Channel 1')
+        ax2.set_title('Ch1 Full Histogram')
         ax2.set_xlabel('Intensity')
         ax2.set_ylabel('Frequency')
-        ax2.set_title('Channel 1 Histogram')
-        ax2.legend()
-        
+        ax2.set_yscale('log')
+
         # Channel 2 histogram
-        ax3 = self.figure.add_subplot(gs[1, 0])
-        ax3.hist(pixels2, bins=50, alpha=0.7, color='green', label='Channel 2')
+        ax3.hist(intensity_data['image2_full'].flatten(), bins=100, alpha=0.7, color='green', label='Channel 2')
+        ax3.set_title('Ch2 Full Histogram')
         ax3.set_xlabel('Intensity')
-        ax3.set_ylabel('Frequency')
-        ax3.set_title('Channel 2 Histogram')
-        ax3.legend()
-        
-        # Statistics text
-        ax4 = self.figure.add_subplot(gs[1, 1])
-        ax4.axis('off')
-        
-        stats_text = []
-        stats_text.append(f"Pearson correlation: {results.get('pearson_correlation', 0):.3f}")
-        stats_text.append(f"Spearman correlation: {results.get('spearman_correlation', 0):.3f}")
-        
-        if 'manders_m1' in results:
-            stats_text.append(f"Manders M1: {results['manders_m1']:.3f}")
-            stats_text.append(f"Manders M2: {results['manders_m2']:.3f}")
-            
-        if 'colocalization_percentage' in results:
-            stats_text.append(f"Colocalization: {results['colocalization_percentage']:.1f}%")
-            
-        if 'costes_threshold1' in results:
-            stats_text.append(f"Costes threshold 1: {results['costes_threshold1']:.1f}")
-            stats_text.append(f"Costes threshold 2: {results['costes_threshold2']:.1f}")
-            
-        ax4.text(0.1, 0.9, '\n'.join(stats_text), transform=ax4.transAxes,
-                verticalalignment='top', fontsize=10, fontfamily='monospace')
-        ax4.set_title('Statistics Summary')
+        ax3.set_yscale('log')
         
         self.canvas.draw()
 
@@ -356,11 +345,19 @@ class AnalysisWidget(QWidget):
         self.analyze_btn.clicked.connect(self.analyze_colocalization)
         controls_layout.addWidget(self.analyze_btn)
         
-        # Export button
+        # Export buttons
+        export_layout = QHBoxLayout()
         self.export_analysis_btn = QPushButton("Export Analysis Results")
         self.export_analysis_btn.clicked.connect(self.export_analysis_results)
         self.export_analysis_btn.setEnabled(False)
-        controls_layout.addWidget(self.export_analysis_btn)
+        export_layout.addWidget(self.export_analysis_btn)
+        
+        self.export_report_btn = QPushButton("Export PDF Report")
+        self.export_report_btn.clicked.connect(self.export_analysis_report)
+        self.export_report_btn.setEnabled(False)
+        export_layout.addWidget(self.export_report_btn)
+        
+        controls_layout.addLayout(export_layout)
         
         splitter.addWidget(controls_widget)
         
@@ -419,6 +416,7 @@ class AnalysisWidget(QWidget):
             return
             
         try:
+            from skimage import filters
             thresh1 = filters.threshold_otsu(layer1.data)
             thresh2 = filters.threshold_otsu(layer2.data)
             
@@ -487,6 +485,9 @@ class AnalysisWidget(QWidget):
             self.show_error(f"Failed to display results: {str(e)}")
         finally:
             self.analyze_btn.setEnabled(True)
+            # Enable export buttons
+            self.export_analysis_btn.setEnabled(True)
+            self.export_report_btn.setEnabled(True)
             
     def on_analysis_error(self, error_message):
         """Handle analysis errors"""
@@ -594,6 +595,68 @@ class AnalysisWidget(QWidget):
                 
             except Exception as e:
                 self.show_error(f"Export failed: {str(e)}")
+                
+    def export_analysis_report(self):
+        """Exports a PDF report of the current colocalization analysis."""
+        if not self.current_results:
+            self.show_error("No analysis results to export.")
+            return
+
+        from PyQt6.QtWidgets import QFileDialog
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Analysis Report",
+            "colocalization_report.pdf",
+            "PDF Files (*.pdf)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            from matplotlib.figure import Figure
+            import matplotlib.pyplot as plt
+            report_fig = Figure(figsize=(8.5, 11))
+            report_fig.suptitle('Colocalization Analysis Report', fontsize=16)
+
+            gs = report_fig.add_gridspec(3, 2, height_ratios=[2, 1, 1], hspace=0.5)
+
+            ax1 = report_fig.add_subplot(gs[0, :])
+            intensity_data = self.current_results['intensity_data']
+            try:
+                from matplotlib.colors import LogNorm
+                ax1.hist2d(intensity_data['channel1'], intensity_data['channel2'], bins=100, norm=LogNorm(), cmap='viridis')
+            except:
+                ax1.scatter(intensity_data['channel1'], intensity_data['channel2'], alpha=0.1, s=1)
+            ax1.set_title('Intensity Correlation Heatmap')
+            ax1.set_xlabel('Channel 1 Intensity')
+            ax1.set_ylabel('Channel 2 Intensity')
+
+            ax2 = report_fig.add_subplot(gs[1, 0])
+            ax2.hist(intensity_data['image1_full'].flatten(), bins=100, color='red', alpha=0.7)
+            ax2.set_title('Channel 1 Histogram')
+            ax2.set_yscale('log')
+
+            ax3 = report_fig.add_subplot(gs[1, 1])
+            ax3.hist(intensity_data['image2_full'].flatten(), bins=100, color='green', alpha=0.7)
+            ax3.set_title('Channel 2 Histogram')
+            ax3.set_yscale('log')
+
+            # Add statistics text
+            ax4 = report_fig.add_subplot(gs[2, :])
+            ax4.axis('off')
+            stats_text = []
+            for key, value in self.current_results.items():
+                if key != 'intensity_data':
+                    stats_text.append(f"{key.replace('_', ' ').title()}: {value:.4f}" if isinstance(value, float) else f"{key}: {value}")
+            ax4.text(0.05, 0.95, '\n'.join(stats_text), transform=ax4.transAxes, va='top', fontfamily='monospace')
+
+            report_fig.savefig(file_path, format='pdf')
+            print(f"Report saved to {file_path}")
+
+        except Exception as e:
+            self.show_error(f"Failed to export PDF report: {e}")
                 
     def get_selected_layer(self, combo_box):
         """Get the selected layer from combo box"""
