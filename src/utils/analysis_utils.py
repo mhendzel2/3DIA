@@ -593,3 +593,87 @@ def quality_assessment(image):
         metrics['error'] = str(e)
     
     return metrics
+
+def four_param_logistic(x, A, B, C, D):
+    """4PL logistic function for dose-response curves."""
+    return D + (A - D) / (1 + (x / C)**B)
+
+def fit_dose_response(concentrations, responses):
+    """
+    Fits a 4PL model to dose-response data to find the IC50.
+    
+    Args:
+        concentrations (list): List of drug concentrations.
+        responses (list): List of corresponding cellular responses (e.g., mean intensity).
+        
+    Returns:
+        dict: A dictionary containing the fitted parameters, including IC50.
+    """
+    if len(concentrations) < 4 or len(responses) < 4:
+        return {"error": "Insufficient data for 4PL fit."}
+        
+    try:
+        try:
+            from scipy.optimize import curve_fit
+            import numpy as np
+            
+            # Convert to numpy arrays
+            x_data = np.array(concentrations)
+            y_data = np.array(responses)
+            
+            p0 = [np.min(y_data), 1, np.median(x_data), np.max(y_data)]
+            params, _ = curve_fit(four_param_logistic, x_data, y_data, p0=p0, maxfev=10000)
+            
+            ic50 = params[2]  # C parameter is the IC50
+            
+            return {
+                'ic50': ic50,
+                'min_response': params[0],  # A parameter
+                'hill_slope': params[1],    # B parameter
+                'max_response': params[3],  # D parameter
+                'fit_method': 'scipy_curve_fit'
+            }
+            
+        except ImportError:
+            # Fallback to simple estimation if scipy not available
+            return estimate_ic50_simple(concentrations, responses)
+            
+    except RuntimeError:
+        return {"error": "Dose-response curve fit failed."}
+
+def estimate_ic50_simple(concentrations, responses):
+    """
+    Simple IC50 estimation without scipy dependency.
+    Finds the concentration closest to 50% response.
+    """
+    try:
+        min_resp = min(responses)
+        max_resp = max(responses)
+        
+        if max_resp == min_resp:
+            return {"error": "No response variation in data"}
+            
+        normalized = [(r - min_resp) / (max_resp - min_resp) * 100 for r in responses]
+        
+        target = 50.0
+        best_idx = 0
+        best_diff = abs(normalized[0] - target)
+        
+        for i, norm_resp in enumerate(normalized):
+            diff = abs(norm_resp - target)
+            if diff < best_diff:
+                best_diff = diff
+                best_idx = i
+        
+        ic50_estimate = concentrations[best_idx]
+        
+        return {
+            'ic50': ic50_estimate,
+            'min_response': min_resp,
+            'max_response': max_resp,
+            'fit_method': 'simple_estimation',
+            'closest_response_percent': normalized[best_idx]
+        }
+        
+    except Exception as e:
+        return {"error": f"Simple IC50 estimation failed: {str(e)}"}

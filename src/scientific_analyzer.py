@@ -79,6 +79,13 @@ except ImportError:
     HAS_PIL = False
     print("PIL not available")
 
+try:
+    from batch_processor import BatchProcessor, WORKFLOW_TEMPLATES
+    HAS_BATCH_PROCESSOR = True
+except ImportError:
+    HAS_BATCH_PROCESSOR = False
+    print("BatchProcessor not available - batch processing disabled")
+
 class GradientWatershedSegmentation:
     """
     Cell segmentation using gradient flow and watershed algorithms.
@@ -644,6 +651,11 @@ if HAS_FLASK:
     # Global storage
     analysis_cache = {}
     
+    if HAS_BATCH_PROCESSOR:
+        batch_processor = BatchProcessor()
+    else:
+        batch_processor = None
+    
     @app.route('/')
     def index():
         return render_template('microscopy_analyzer.html')
@@ -876,6 +888,73 @@ if HAS_FLASK:
                 
         except Exception as e:
             return jsonify({'error': f'Test image creation failed: {str(e)}'}), 500
+    
+    @app.route('/api/batch/process', methods=['POST'])
+    def process_batch_files():
+        """Handle batch processing of multiple files."""
+        if not HAS_BATCH_PROCESSOR:
+            return jsonify({'error': 'Batch processing not available'}), 503
+            
+        data = request.get_json()
+        files = data.get('files')  # Expect a list of file paths
+        workflow_name = data.get('workflow', 'cell_counting')
+
+        if not files:
+            return jsonify({'error': 'No files provided for batch processing'}), 400
+
+        workflow_config = WORKFLOW_TEMPLATES.get(workflow_name)
+        if not workflow_config:
+            return jsonify({'error': f'Workflow "{workflow_name}" not found'}), 400
+
+        try:
+            batch_id = batch_processor.create_batch_session(files, workflow_config)
+            batch_processor.process_batch(batch_id)
+
+            return jsonify({
+                'success': True,
+                'message': 'Batch processing started.',
+                'batch_id': batch_id,
+                'workflow': workflow_name,
+                'file_count': len(files)
+            })
+        except Exception as e:
+            return jsonify({'error': f'Failed to start batch process: {str(e)}'}), 500
+
+    @app.route('/api/batch/status/<batch_id>', methods=['GET'])
+    def get_batch_status(batch_id):
+        """Get the status of a running batch process."""
+        if not HAS_BATCH_PROCESSOR:
+            return jsonify({'error': 'Batch processing not available'}), 503
+            
+        status = batch_processor.get_batch_status(batch_id)
+        if 'error' in status:
+            return jsonify(status), 404
+        return jsonify(status)
+
+    @app.route('/api/batch/results/<batch_id>', methods=['GET'])
+    def get_batch_results(batch_id):
+        """Get the results of a completed batch process."""
+        if not HAS_BATCH_PROCESSOR:
+            return jsonify({'error': 'Batch processing not available'}), 503
+            
+        results = batch_processor.get_batch_results(batch_id)
+        if 'error' in results:
+            return jsonify(results), 404
+        return jsonify(results)
+    
+    @app.route('/api/workflows', methods=['GET'])
+    def get_available_workflows():
+        """Get list of available batch processing workflows."""
+        if not HAS_BATCH_PROCESSOR:
+            return jsonify({'error': 'Batch processing not available'}), 503
+            
+        workflows = {}
+        for name, config in WORKFLOW_TEMPLATES.items():
+            workflows[name] = {
+                'name': config.get('name', name),
+                'description': config.get('description', 'No description available')
+            }
+        return jsonify({'workflows': workflows})
 
 # Helper methods for ImageProcessor
 def create_label_overlay(image, labels):
