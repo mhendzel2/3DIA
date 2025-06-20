@@ -1,0 +1,38 @@
+name: scientific-image-analyzer
+display_name: Scientific Image Analyzer
+version: 1.0.0
+author: Scientific Computing Team
+description: Multi-dimensional microscopy image analysis suite
+license: MIT
+
+contributions:
+  readers:
+    - command: scientific-image-analyzer.get_reader
+      filename_patterns: 
+        - '*.czi'
+        - '*.lif'
+        - '*.nd2'
+        - '*.oib'
+        - '*.oif'
+        - '*.tif'
+        - '*.tiff'
+        - '*.ims'
+        - '*.lsm'
+      accepts_directories: false
+
+  writers:
+    - command: scientific-image-analyzer.get_writer
+      layer_types: ['image']
+      filename_extensions: ['.tif', '.tiff']
+
+  widgets:
+    - command: scientific-image-analyzer.file_io_widget
+      display_name: File Operations
+    - command: scientific-image-analyzer.processing_widget
+      display_name: Image Processing
+    - command: scientific-image-analyzer.segmentation_widget
+      display_name: Segmentation
+    - command: scientific-image-analyzer.analysis_widget
+      display_name: Analysis
+    - command: scientific-image-analyzer.visualization_widget
+      display_name: 3D Visualization

@@ -1,0 +1,33 @@
+{
+  "chimerax_path": "",
+  "chimerax_auto_detect": true,
+  "export_formats": {
+    "tiff_use_library": true,
+    "mrc_use_library": true,
+    "prefer_standard_formats": true
+  },
+  "performance": {
+    "max_workers": 4,
+    "memory_limit_mb": 2048,
+    "enable_gpu_acceleration": false
+  },
+  "dependencies": {
+    "required": [],
+    "optional": [
+      "numpy", "scipy", "scikit-image", "matplotlib",
+      "tifffile", "mrcfile", "opencv-python", "pandas",
+      "napari", "cellpose", "stardist"
+    ],
+    "fallback_mode": true
+  },
+  "web_interface": {
+    "preferred_server": "enhanced",
+    "enable_flask_fallback": false,
+    "port": 5000
+  },
+  "debug": {
+    "enable_logging": true,
+    "log_level": "INFO",
+    "save_intermediate_results": false
+  }
+}

@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scientific Image Analyzer - Napari Web Interface</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; line-height: 1.6; }
+        
+        .header { background: linear-gradient(135deg, #2c3e50, #34495e); color: white; padding: 1rem 0; }
+        .header-content { max-width: 1200px; margin: 0 auto; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { display: flex; align-items: center; gap: 1rem; }
+        .logo h1 { font-size: 1.8rem; font-weight: 300; }
+        .subtitle { font-size: 0.9rem; opacity: 0.8; }
+        
+        .main-container { max-width: 1200px; margin: 2rem auto; padding: 0 2rem; }
+        .dashboard { display: grid; grid-template-columns: 350px 1fr; gap: 2rem; }
+        
+        .card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .card-title { font-size: 1.2rem; font-weight: 600; color: #2c3e50; margin-bottom: 1rem; }
+        
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin: 0.25rem; transition: all 0.3s; font-size: 0.9rem; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: linear-gradient(135deg, #3498db, #2980b9); color: white; }
+        .btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #2980b9, #1f639a); transform: translateY(-1px); }
+        .btn-success { background: linear-gradient(135deg, #27ae60, #229954); color: white; }
+        .btn-warning { background: linear-gradient(135deg, #f39c12, #e67e22); color: white; }
+        .btn-info { background: linear-gradient(135deg, #17a2b8, #138496); color: white; }
+        
+        .upload-area { border: 3px dashed #bdc3c7; border-radius: 8px; padding: 2rem; text-align: center; background: #f8f9fa; margin-bottom: 1rem; transition: all 0.3s; }
+        .upload-area:hover { border-color: #3498db; background: #ebf3ff; }
+        .upload-area.dragover { border-color: #27ae60; background: #eafaf1; }
+        
+        .file-input { display: none; }
+        .upload-text { color: #666; margin-bottom: 1rem; }
+        .upload-button { background: #3498db; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; }
+        
+        .image-display { border: 2px solid #e9ecef; border-radius: 8px; min-height: 400px; display: flex; align-items: center; justify-content: center; position: relative; background: #fff; }
+        .image-canvas { max-width: 100%; max-height: 400px; }
+        .placeholder-text { color: #999; font-size: 1.1rem; }
+        
+        .section { margin: 1rem 0; padding: 1rem; border-left: 4px solid #3498db; background: #f8f9fa; }
+        .section-title { font-weight: 600; color: #2c3e50; margin-bottom: 0.5rem; }
+        .section-description { font-size: 0.9rem; color: #666; margin-bottom: 1rem; }
+        
+        .parameter-group { margin: 1rem 0; }
+        .parameter-label { display: block; margin-bottom: 0.5rem; color: #444; font-weight: 500; }
+        .parameter-input { width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 0.5rem; }
+        
+        .results-display { background: #f8f9fa; border-left: 4px solid #27ae60; padding: 1rem; margin: 1rem 0; font-family: monospace; font-size: 0.9rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1rem 0; }
+        .stat-item { background: white; padding: 1rem; border-radius: 4px; text-align: center; }
+        .stat-value { font-size: 1.3rem; font-weight: bold; color: #3498db; }
+        .stat-label { font-size: 0.8rem; color: #666; }
+        
+        .plugin-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+        .plugin-badge { background: #3498db; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; }
+        
+        .status-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 0.5rem; }
+        .status-ready { background: #27ae60; }
+        .status-processing { background: #f39c12; }
+        .status-error { background: #e74c3c; }
+        
+        .progress-bar { width: 100%; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; margin: 1rem 0; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #3498db, #2980b9); transition: width 0.3s; }
+        
+        .message { padding: 0.75rem; border-radius: 4px; margin: 1rem 0; }
+        .message-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .message-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .message-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1>Scientific Image Analyzer</h1>
+                <div>
+                    <div class="subtitle">Advanced Microscopy Analysis Suite</div>
+                    <div class="subtitle">Powered by Napari Hub Plugins</div>
+                </div>
+            </div>
+            <div>
+                <span class="status-indicator status-ready"></span>
+                <span id="napari-status">Napari Ready</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="dashboard">
+            <!-- Control Panel -->
+            <div>
+                <!-- File Upload -->
+                <div class="card">
+                    <h2 class="card-title">File Upload</h2>
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-text">
+                            <strong>Click or drag to upload microscopy images</strong><br>
+                            Supports: TIFF, CZI, LIF, ND2, OIB, OIF, PNG, JPEG
+                        </div>
+                        <button class="upload-button" onclick="document.getElementById('file-input').click()">
+                            Choose File
+                        </button>
+                        <input type="file" id="file-input" class="file-input" accept=".tif,.tiff,.czi,.lif,.nd2,.oib,.oif,.png,.jpg,.jpeg">
+                    </div>
+                    <div id="upload-status"></div>
+                </div>
+
+                <!-- Image Processing -->
+                <div class="card">
+                    <h2 class="card-title">Image Processing</h2>
+                    
+                    <div class="section">
+                        <div class="section-title">Gaussian Filter</div>
+                        <div class="section-description">Smooth images and reduce noise</div>
+                        <div class="parameter-group">
+                            <label class="parameter-label">Sigma:</label>
+                            <input type="number" id="gaussian-sigma" class="parameter-input" value="2.0" min="0.1" max="10" step="0.1">
+                        </div>
+                        <button id="gaussian-btn" class="btn btn-primary" disabled>Apply Gaussian Filter</button>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">Median Filter</div>
+                        <div class="section-description">Remove salt-and-pepper noise</div>
+                        <div class="parameter-group">
+                            <label class="parameter-label">Size:</label>
+                            <input type="number" id="median-size" class="parameter-input" value="3" min="3" max="15" step="2">
+                        </div>
+                        <button id="median-btn" class="btn btn-primary" disabled>Apply Median Filter</button>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">Threshold</div>
+                        <div class="section-description">Create binary images</div>
+                        <div class="parameter-group">
+                            <label class="parameter-label">Method:</label>
+                            <select id="threshold-method" class="parameter-input">
+                                <option value="otsu">Otsu</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="isodata">IsoData</option>
+                            </select>
+                        </div>
+                        <button id="threshold-btn" class="btn btn-primary" disabled>Apply Threshold</button>
+                    </div>
+                </div>
+
+                <!-- Segmentation -->
+                <div class="card">
+                    <h2 class="card-title">AI Segmentation</h2>
+                    
+                    <div class="section">
+                        <div class="section-title">Cellpose</div>
+                        <div class="section-description">AI-powered cell segmentation</div>
+                        <div class="parameter-group">
+                            <label class="parameter-label">Cell Diameter:</label>
+                            <input type="number" id="cellpose-diameter" class="parameter-input" value="30" min="10" max="100">
+                        </div>
+                        <button id="cellpose-btn" class="btn btn-success" disabled>Run Cellpose</button>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">StarDist</div>
+                        <div class="section-description">Star-convex nucleus detection</div>
+                        <div class="parameter-group">
+                            <label class="parameter-label">Threshold:</label>
+                            <input type="number" id="stardist-threshold" class="parameter-input" value="0.5" min="0.1" max="1.0" step="0.1">
+                        </div>
+                        <button id="stardist-btn" class="btn btn-success" disabled>Run StarDist</button>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">Watershed</div>
+                        <div class="section-description">Classical watershed segmentation</div>
+                        <button id="watershed-btn" class="btn btn-success" disabled>Run Watershed</button>
+                    </div>
+                </div>
+
+                <!-- Analysis -->
+                <div class="card">
+                    <h2 class="card-title">Analysis Tools</h2>
+                    
+                    <div class="section">
+                        <div class="section-title">Object Measurements</div>
+                        <div class="section-description">Analyze segmented objects</div>
+                        <button id="measure-btn" class="btn btn-info" disabled>Measure Objects</button>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">Colocalization</div>
+                        <div class="section-description">Statistical channel analysis</div>
+                        <button id="coloc-btn" class="btn btn-info" disabled>Run Colocalization</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Display Area -->
+            <div>
+                <div class="card">
+                    <h2 class="card-title">Image Display</h2>
+                    <div class="image-display" id="image-display">
+                        <div class="placeholder-text">Upload an image to begin analysis</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="card-title">Results</h2>
+                    <div id="results-container">
+                        <div class="plugin-badges">
+                            <span class="plugin-badge">napari-cellpose</span>
+                            <span class="plugin-badge">napari-stardist</span>
+                            <span class="plugin-badge">napari-skimage-regionprops</span>
+                            <span class="plugin-badge">napari-btrack</span>
+                            <span class="plugin-badge">napari-clusters-plotter</span>
+                        </div>
+                        <div class="placeholder-text">Results will appear here after analysis</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let currentImage = null;
+        let napariAvailable = false;
+
+        // Initialize session
+        async function initSession() {
+            try {
+                const response = await fetch('/api/session/create', { method: 'POST' });
+                const data = await response.json();
+                sessionId = data.session_id;
+                napariAvailable = data.napari_available;
+                
+                const statusEl = document.getElementById('napari-status');
+                if (napariAvailable) {
+                    statusEl.textContent = 'Napari Ready';
+                    statusEl.previousElementSibling.className = 'status-indicator status-ready';
+                } else {
+                    statusEl.textContent = 'Fallback Mode';
+                    statusEl.previousElementSibling.className = 'status-indicator status-processing';
+                }
+            } catch (error) {
+                console.error('Failed to initialize session:', error);
+                showMessage('Failed to initialize session', 'error');
+            }
+        }
+
+        // File upload handling
+        function setupFileUpload() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('file-input');
+
+            // Drag and drop
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    uploadFile(files[0]);
+                }
+            });
+
+            // File input
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    uploadFile(e.target.files[0]);
+                }
+            });
+        }
+
+        async function uploadFile(file) {
+            if (!sessionId) {
+                showMessage('Session not initialized', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('session_id', sessionId);
+
+            showMessage('Uploading file...', 'info');
+            updateProgress(10);
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                updateProgress(50);
+
+                if (data.success) {
+                    currentImage = data.filename;
+                    showMessage(`Image loaded: ${data.filename} (${data.shape.join('x')})`, 'success');
+                    enableControls();
+                    updateProgress(100);
+                    setTimeout(() => updateProgress(0), 1000);
+                } else {
+                    showMessage(data.error || 'Upload failed', 'error');
+                    updateProgress(0);
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showMessage('Upload failed', 'error');
+                updateProgress(0);
+            }
+        }
+
+        function enableControls() {
+            const buttons = [
+                'gaussian-btn', 'median-btn', 'threshold-btn',
+                'cellpose-btn', 'stardist-btn', 'watershed-btn',
+                'measure-btn', 'coloc-btn'
+            ];
+            buttons.forEach(id => {
+                document.getElementById(id).disabled = false;
+            });
+        }
+
+        async function processImage(operation, params = {}) {
+            if (!sessionId || !currentImage) return;
+
+            showMessage(`Running ${operation}...`, 'info');
+            updateProgress(20);
+
+            try {
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        operation: operation,
+                        params: params
+                    })
+                });
+
+                const data = await response.json();
+                updateProgress(80);
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    updateProgress(100);
+                    setTimeout(() => updateProgress(0), 1000);
+                } else {
+                    showMessage(data.error || 'Processing failed', 'error');
+                    updateProgress(0);
+                }
+            } catch (error) {
+                console.error('Processing error:', error);
+                showMessage('Processing failed', 'error');
+                updateProgress(0);
+            }
+        }
+
+        async function segmentImage(method, params = {}) {
+            if (!sessionId || !currentImage) return;
+
+            showMessage(`Running ${method} segmentation...`, 'info');
+            updateProgress(30);
+
+            try {
+                const response = await fetch('/api/segment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        method: method,
+                        params: params
+                    })
+                });
+
+                const data = await response.json();
+                updateProgress(90);
+
+                if (data.success) {
+                    showMessage(`${data.message}`, 'success');
+                    document.getElementById('measure-btn').disabled = false;
+                    updateProgress(100);
+                    setTimeout(() => updateProgress(0), 1000);
+                } else {
+                    showMessage(data.error || 'Segmentation failed', 'error');
+                    updateProgress(0);
+                }
+            } catch (error) {
+                console.error('Segmentation error:', error);
+                showMessage('Segmentation failed', 'error');
+                updateProgress(0);
+            }
+        }
+
+        async function analyzeObjects() {
+            if (!sessionId || !currentImage) return;
+
+            showMessage('Analyzing objects...', 'info');
+            updateProgress(40);
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        labels_key: 'labels_cellpose' // Default to cellpose labels
+                    })
+                });
+
+                const data = await response.json();
+                updateProgress(90);
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    displayResults(data);
+                    updateProgress(100);
+                    setTimeout(() => updateProgress(0), 1000);
+                } else {
+                    showMessage(data.error || 'Analysis failed', 'error');
+                    updateProgress(0);
+                }
+            } catch (error) {
+                console.error('Analysis error:', error);
+                showMessage('Analysis failed', 'error');
+                updateProgress(0);
+            }
+        }
+
+        async function runColocalization() {
+            if (!sessionId || !currentImage) return;
+
+            showMessage('Running colocalization analysis...', 'info');
+            updateProgress(40);
+
+            try {
+                const response = await fetch('/api/colocalization', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+                updateProgress(90);
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    displayColocResults(data.results);
+                    updateProgress(100);
+                    setTimeout(() => updateProgress(0), 1000);
+                } else {
+                    showMessage(data.error || 'Colocalization failed', 'error');
+                    updateProgress(0);
+                }
+            } catch (error) {
+                console.error('Colocalization error:', error);
+                showMessage('Colocalization failed', 'error');
+                updateProgress(0);
+            }
+        }
+
+        function displayResults(data) {
+            const container = document.getElementById('results-container');
+            let html = '<div class="stats-grid">';
+            
+            if (data.measurements && data.measurements.length > 0) {
+                const sample = data.measurements[0];
+                html += `
+                    <div class="stat-item">
+                        <div class="stat-value">${data.total_objects}</div>
+                        <div class="stat-label">Total Objects</div>
+                    </div>
+                `;
+                
+                if (sample.area !== undefined) {
+                    const avgArea = data.measurements.reduce((sum, m) => sum + m.area, 0) / data.measurements.length;
+                    html += `
+                        <div class="stat-item">
+                            <div class="stat-value">${avgArea.toFixed(1)}</div>
+                            <div class="stat-label">Avg Area</div>
+                        </div>
+                    `;
+                }
+                
+                if (sample.mean_intensity !== undefined) {
+                    const avgIntensity = data.measurements.reduce((sum, m) => sum + m.mean_intensity, 0) / data.measurements.length;
+                    html += `
+                        <div class="stat-item">
+                            <div class="stat-value">${avgIntensity.toFixed(1)}</div>
+                            <div class="stat-label">Avg Intensity</div>
+                        </div>
+                    `;
+                }
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function displayColocResults(results) {
+            const container = document.getElementById('results-container');
+            let html = '<div class="stats-grid">';
+            
+            if (results.pearson_correlation !== undefined) {
+                html += `
+                    <div class="stat-item">
+                        <div class="stat-value">${results.pearson_correlation.toFixed(3)}</div>
+                        <div class="stat-label">Pearson Correlation</div>
+                    </div>
+                `;
+            }
+            
+            if (results.manders_m1 !== undefined) {
+                html += `
+                    <div class="stat-item">
+                        <div class="stat-value">${results.manders_m1.toFixed(3)}</div>
+                        <div class="stat-label">Manders M1</div>
+                    </div>
+                `;
+            }
+            
+            if (results.manders_m2 !== undefined) {
+                html += `
+                    <div class="stat-item">
+                        <div class="stat-value">${results.manders_m2.toFixed(3)}</div>
+                        <div class="stat-label">Manders M2</div>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function showMessage(text, type) {
+            const statusEl = document.getElementById('upload-status');
+            statusEl.className = `message message-${type}`;
+            statusEl.textContent = text;
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusEl.textContent = '';
+                    statusEl.className = '';
+                }, 3000);
+            }
+        }
+
+        function updateProgress(percent) {
+            let progressBar = document.querySelector('.progress-fill');
+            if (!progressBar) {
+                const container = document.getElementById('upload-status');
+                const progressDiv = document.createElement('div');
+                progressDiv.className = 'progress-bar';
+                progressDiv.innerHTML = '<div class="progress-fill"></div>';
+                container.appendChild(progressDiv);
+                progressBar = progressDiv.querySelector('.progress-fill');
+            }
+            progressBar.style.width = percent + '%';
+            
+            if (percent === 0) {
+                setTimeout(() => {
+                    const progressBarContainer = document.querySelector('.progress-bar');
+                    if (progressBarContainer) {
+                        progressBarContainer.remove();
+                    }
+                }, 500);
+            }
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            initSession();
+            setupFileUpload();
+
+            // Processing buttons
+            document.getElementById('gaussian-btn').addEventListener('click', () => {
+                const sigma = parseFloat(document.getElementById('gaussian-sigma').value);
+                processImage('gaussian_filter', { sigma });
+            });
+
+            document.getElementById('median-btn').addEventListener('click', () => {
+                const size = parseInt(document.getElementById('median-size').value);
+                processImage('median_filter', { size });
+            });
+
+            document.getElementById('threshold-btn').addEventListener('click', () => {
+                const method = document.getElementById('threshold-method').value;
+                processImage('threshold', { method });
+            });
+
+            // Segmentation buttons
+            document.getElementById('cellpose-btn').addEventListener('click', () => {
+                const diameter = parseInt(document.getElementById('cellpose-diameter').value);
+                segmentImage('cellpose', { diameter });
+            });
+
+            document.getElementById('stardist-btn').addEventListener('click', () => {
+                const threshold = parseFloat(document.getElementById('stardist-threshold').value);
+                segmentImage('stardist', { threshold });
+            });
+
+            document.getElementById('watershed-btn').addEventListener('click', () => {
+                segmentImage('watershed');
+            });
+
+            // Analysis buttons
+            document.getElementById('measure-btn').addEventListener('click', analyzeObjects);
+            document.getElementById('coloc-btn').addEventListener('click', runColocalization);
+        });
+    </script>
+</body>
+</html>
