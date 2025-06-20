@@ -148,13 +148,13 @@ class GradientWatershedSegmentation:
             for j in range(size):
                 x, y = i - center, j - center
                 value = math.exp(-(x*x + y*y) / (2 * sigma * sigma))
-                kernel[i][j] = value
+                kernel[i][j] = int(value)
                 sum_val += value
         
         # Normalize
         for i in range(size):
             for j in range(size):
-                kernel[i][j] /= sum_val
+                kernel[i][j] = int(kernel[i][j] / sum_val)
         
         return kernel
     
@@ -168,7 +168,7 @@ class GradientWatershedSegmentation:
             for j in range(1, width - 1):
                 gx = image[i][j+1] - image[i][j-1]
                 gy = image[i+1][j] - image[i-1][j]
-                gradients[i][j] = math.sqrt(gx*gx + gy*gy)
+                gradients[i][j] = int(math.sqrt(gx*gx + gy*gy))
         
         return gradients
     
@@ -728,7 +728,7 @@ if HAS_FLASK:
             analysis_cache[session_id]['results'][f'measurements_{method}'] = measurements
             
             # Create visualization (simple overlay)
-            overlay = ImageProcessor.create_label_overlay(image, labels)
+            overlay = create_label_overlay(image, labels)
             overlay_img = ImageProcessor.array_to_image(overlay)
             
             if overlay_img:
@@ -806,7 +806,7 @@ if HAS_FLASK:
             time_series = []
             for t in range(5):
                 # Simulate movement by shifting
-                shifted_image = ImageProcessor.shift_image(image, t*3, t*2)
+                shifted_image = shift_image(image, t*3, t*2)
                 labels = GradientWatershedSegmentation.segment_cells(shifted_image)
                 time_series.append(labels)
             
@@ -917,8 +917,8 @@ def shift_image(image, shift_x, shift_y):
     
     return shifted
 
-ImageProcessor.create_label_overlay = create_label_overlay
-ImageProcessor.shift_image = shift_image
+setattr(ImageProcessor, 'create_label_overlay', staticmethod(create_label_overlay))
+setattr(ImageProcessor, 'shift_image', staticmethod(shift_image))
 
 def main():
     """Main application entry point"""
