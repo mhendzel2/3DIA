@@ -1,28 +1,35 @@
 """
 Analysis Utility Functions for Scientific Image Analyzer
-Provides statistical analysis and colocalization utilities
+Provides statistical analysis and colocalization utilities with robust fallbacks.
 """
+import math
 
-import numpy as np
-from typing import Dict, Tuple, List, Optional, Union
-from scipy import ndimage, stats
-from skimage import measure, morphology
-import pandas as pd
+try:
+    import numpy as np
+    from scipy import ndimage, stats
+    from skimage import measure, morphology
+    import pandas as pd
+    HAS_SCIENTIFIC_LIBS = True
+except ImportError:
+    HAS_SCIENTIFIC_LIBS = False
+    print("Warning: numpy, scipy, or scikit-image not found. Using pure Python fallbacks.")
 
-def calculate_object_statistics(labeled_image: np.ndarray, 
-                               intensity_image: Optional[np.ndarray] = None,
-                               properties: Optional[List[str]] = None) -> Dict:
+def calculate_object_statistics(labeled_image, intensity_image=None, properties=None):
     """
-    Calculate comprehensive statistics for labeled objects including advanced morphological properties
-    
-    Args:
-        labeled_image: Labeled image with object regions
-        intensity_image: Optional intensity image for intensity-based measurements
-        properties: List of properties to calculate
-        
-    Returns:
-        Dictionary containing calculated statistics
+    Calculate comprehensive statistics for labeled objects.
+    Uses scikit-image if available, otherwise provides basic pure Python measurements.
     """
+    if HAS_SCIENTIFIC_LIBS:
+        try:
+            return _calculate_object_statistics_skimage(labeled_image, intensity_image, properties)
+        except Exception as e:
+            print(f"Scikit-image analysis failed: {e}. Using fallback.")
+            return _calculate_object_statistics_fallback(labeled_image, intensity_image)
+    else:
+        return _calculate_object_statistics_fallback(labeled_image, intensity_image)
+
+def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, properties=None):
+    """scikit-image based implementation for object statistics."""
     if properties is None:
         properties = [
             'label', 'area', 'centroid', 'bbox', 'perimeter', 'convex_area',
@@ -38,138 +45,177 @@ def calculate_object_statistics(labeled_image: np.ndarray,
         ]
         properties.extend(intensity_props)
     
-    try:
-        # Calculate region properties using skimage
-        regions = measure.regionprops_table(
-            labeled_image,
-            intensity_image=intensity_image,
-            properties=properties
+    # Calculate region properties using skimage
+    regions = measure.regionprops_table(
+        labeled_image,
+        intensity_image=intensity_image,
+        properties=properties
+    )
+    
+    df = pd.DataFrame(regions)
+    
+    # Calculate custom Circularity (requires perimeter and area)
+    if 'area' in df and 'perimeter' in df:
+        df['circularity'] = df.apply(
+            lambda row: (4 * np.pi * row['area']) / (row['perimeter']**2) if row['perimeter'] > 0 else 0,
+            axis=1
         )
-        
-        df = pd.DataFrame(regions)
-        
-        # Calculate custom Circularity (requires perimeter and area)
-        if 'area' in df and 'perimeter' in df:
-            df['circularity'] = df.apply(
-                lambda row: (4 * np.pi * row['area']) / (row['perimeter']**2) if row['perimeter'] > 0 else 0,
-                axis=1
-            )
-        
-        stats_dict = df.to_dict('list')
-        
-        # Calculate additional derived statistics
-        if 'area' in stats_dict:
-            areas = np.array(stats_dict['area'])
-            stats_dict.update({
-                'total_area': float(np.sum(areas)),
-                'mean_area': float(np.mean(areas)),
-                'std_area': float(np.std(areas)),
-                'min_area': float(np.min(areas)),
-                'max_area': float(np.max(areas)),
-                'median_area': float(np.median(areas))
-            })
-        
-        if 'mean_intensity' in stats_dict:
-            intensities = np.array(stats_dict['mean_intensity'])
-            stats_dict.update({
-                'mean_object_intensity': float(np.mean(intensities)),
-                'std_object_intensity': float(np.std(intensities)),
-                'min_object_intensity': float(np.min(intensities)),
-                'max_object_intensity': float(np.max(intensities))
-            })
-        
-        # Object count
-        stats_dict['object_count'] = len(df)
-        
-        return stats_dict
-        
-    except Exception as e:
-        return {'error': str(e), 'object_count': 0}
+    
+    stats_dict = df.to_dict('list')
+    
+    # Calculate additional derived statistics
+    if 'area' in stats_dict:
+        areas = np.array(stats_dict['area'])
+        stats_dict.update({
+            'total_area': float(np.sum(areas)),
+            'mean_area': float(np.mean(areas)),
+            'std_area': float(np.std(areas)),
+            'min_area': float(np.min(areas)),
+            'max_area': float(np.max(areas)),
+            'median_area': float(np.median(areas))
+        })
+    
+    if 'mean_intensity' in stats_dict:
+        intensities = np.array(stats_dict['mean_intensity'])
+        stats_dict.update({
+            'mean_object_intensity': float(np.mean(intensities)),
+            'std_object_intensity': float(np.std(intensities)),
+            'min_object_intensity': float(np.min(intensities)),
+            'max_object_intensity': float(np.max(intensities))
+        })
+    
+    # Object count
+    stats_dict['object_count'] = len(df)
+    
+    return stats_dict
 
-def calculate_colocalization_coefficients(image1: np.ndarray, 
-                                        image2: np.ndarray) -> Dict[str, float]:
-    """
-    Calculate various colocalization coefficients
+def _calculate_object_statistics_fallback(labels, intensity_image=None):
+    """Pure Python fallback for basic object measurements."""
+    unique_labels = set(pixel for row in labels for pixel in row if pixel > 0)
+    results = {'label': [], 'area': [], 'mean_intensity': []}
     
-    Args:
-        image1: First channel image
-        image2: Second channel image
+    for label_id in unique_labels:
+        area = 0
+        intensity_sum = 0
+        pixels = []
+        for r, row in enumerate(labels):
+            for c, pixel_label in enumerate(row):
+                if pixel_label == label_id:
+                    area += 1
+                    if intensity_image:
+                        intensity_sum += intensity_image[r][c]
         
-    Returns:
-        Dictionary of colocalization coefficients
+        results['label'].append(label_id)
+        results['area'].append(area)
+        if intensity_image and area > 0:
+            results['mean_intensity'].append(intensity_sum / area)
+        else:
+             results['mean_intensity'].append(0)
+
+    results['object_count'] = len(unique_labels)
+    return results
+
+def calculate_colocalization_coefficients(image1, image2, 
+                                         threshold1=None,
+                                         threshold2=None):
     """
-    if image1.shape != image2.shape:
-        raise ValueError("Images must have the same shape")
+    Calculate various colocalization coefficients.
+    Uses scipy if available, otherwise provides basic pure Python measurements.
+    """
+    if HAS_SCIENTIFIC_LIBS:
+        try:
+            return _calculate_colocalization_coefficients_scipy(image1, image2, threshold1, threshold2)
+        except Exception as e:
+            print(f"Scipy colocalization failed: {e}. Using fallback.")
+            return _calculate_colocalization_coefficients_fallback(image1, image2)
+    else:
+        return _calculate_colocalization_coefficients_fallback(image1, image2)
+
+def _calculate_colocalization_coefficients_scipy(image1, image2, threshold1=None, threshold2=None):
+    """scipy-based implementation for colocalization."""
+    if hasattr(image1, 'shape') and hasattr(image2, 'shape'):
+        if image1.shape != image2.shape:
+            raise ValueError("Images must have the same shape")
     
-    # Flatten images for calculations
+    if not isinstance(image1, np.ndarray):
+        image1 = np.array(image1)
+    if not isinstance(image2, np.ndarray):
+        image2 = np.array(image2)
+    
     ch1 = image1.flatten().astype(np.float64)
     ch2 = image2.flatten().astype(np.float64)
     
-    # Remove zero pixels for some calculations
-    mask = (ch1 > 0) & (ch2 > 0)
-    ch1_nz = ch1[mask]
-    ch2_nz = ch2[mask]
+    pearson_r, _ = stats.pearsonr(ch1, ch2)
     
-    coefficients = {}
+    # Calculate thresholds if not provided
+    if threshold1 is None or threshold2 is None:
+        thresh1, thresh2 = calculate_automatic_thresholds(image1, image2)
+        if threshold1 is None:
+            threshold1 = thresh1
+        if threshold2 is None:
+            threshold2 = thresh2
     
-    try:
-        # Pearson correlation coefficient
-        if len(ch1_nz) > 1:
-            pearson_r, pearson_p = stats.pearsonr(ch1_nz, ch2_nz)
-            coefficients['pearson_correlation'] = pearson_r
-            coefficients['pearson_p_value'] = pearson_p
-        else:
-            coefficients['pearson_correlation'] = 0.0
-            coefficients['pearson_p_value'] = 1.0
-        
-        # Spearman correlation coefficient
-        if len(ch1_nz) > 1:
-            spearman_r, spearman_p = stats.spearmanr(ch1_nz, ch2_nz)
-            coefficients['spearman_correlation'] = spearman_r
-            coefficients['spearman_p_value'] = spearman_p
-        else:
-            coefficients['spearman_correlation'] = 0.0
-            coefficients['spearman_p_value'] = 1.0
-        
-        # Overlap coefficients (Manders-like)
-        sum_ch1 = np.sum(ch1)
-        sum_ch2 = np.sum(ch2)
-        
-        if sum_ch1 > 0 and sum_ch2 > 0:
-            # K1: fraction of ch1 intensity that overlaps with ch2
-            overlap_ch1 = np.sum(ch1 * (ch2 > 0))
-            coefficients['overlap_k1'] = overlap_ch1 / sum_ch1
-            
-            # K2: fraction of ch2 intensity that overlaps with ch1
-            overlap_ch2 = np.sum(ch2 * (ch1 > 0))
-            coefficients['overlap_k2'] = overlap_ch2 / sum_ch2
-        else:
-            coefficients['overlap_k1'] = 0.0
-            coefficients['overlap_k2'] = 0.0
-        
-        # Costes' automatic threshold approach would go here
-        # For now, placeholder values
-        coefficients['costes_p_value'] = 0.0
-        coefficients['costes_correlation_random'] = 0.0
-        
-    except Exception as e:
-        # Return default values on error
-        coefficients = {
-            'pearson_correlation': 0.0,
-            'pearson_p_value': 1.0,
-            'spearman_correlation': 0.0,
-            'spearman_p_value': 1.0,
-            'overlap_k1': 0.0,
-            'overlap_k2': 0.0,
-            'costes_p_value': 0.0,
-            'costes_correlation_random': 0.0,
-            'error': str(e)
-        }
-    
-    return coefficients
+    m1, m2 = manders_coefficients(image1, image2, threshold1, threshold2)
 
-def manders_coefficients(image1: np.ndarray, image2: np.ndarray,
-                        threshold1: float = 0, threshold2: float = 0) -> Tuple[float, float]:
+    return {
+        'pearson_correlation': float(pearson_r),
+        'manders_m1': float(m1),
+        'manders_m2': float(m2),
+        'threshold1': float(threshold1),
+        'threshold2': float(threshold2)
+    }
+
+def _calculate_colocalization_coefficients_fallback(image1, image2):
+    """Pure Python fallback for colocalization."""
+    # Flatten images
+    ch1 = [pixel for row in image1 for pixel in row]
+    ch2 = [pixel for row in image2 for pixel in row]
+
+    if not ch1 or not ch2: 
+        return {'pearson_correlation': 0.0, 'manders_m1': 0.0, 'manders_m2': 0.0}
+
+    # Pearson correlation
+    mean1 = sum(ch1) / len(ch1)
+    mean2 = sum(ch2) / len(ch2)
+    
+    numerator = sum((ch1[i] - mean1) * (ch2[i] - mean2) for i in range(len(ch1)))
+    denom1 = sum((p - mean1)**2 for p in ch1)
+    denom2 = sum((p - mean2)**2 for p in ch2)
+    
+    pearson_r = numerator / math.sqrt(denom1 * denom2) if denom1 > 0 and denom2 > 0 else 0
+    
+    return {'pearson_correlation': pearson_r, 'manders_m1': 0.0, 'manders_m2': 0.0}
+
+def calculate_automatic_thresholds(image1, image2):
+    """
+    Calculate automatic thresholds for colocalization analysis
+    """
+    
+    # Use Otsu's method as approximation
+    try:
+        if HAS_SCIENTIFIC_LIBS:
+            from skimage import filters
+            thresh1 = filters.threshold_otsu(image1)
+            thresh2 = filters.threshold_otsu(image2)
+            return float(thresh1), float(thresh2)
+        else:
+            raise ImportError("Scientific libraries not available")
+    except ImportError:
+        # Fallback to percentile-based thresholding
+        if HAS_SCIENTIFIC_LIBS:
+            thresh1 = np.percentile(image1, 75)
+            thresh2 = np.percentile(image2, 75)
+        else:
+            # Pure Python percentile calculation
+            flat1 = [pixel for row in image1 for pixel in row]
+            flat2 = [pixel for row in image2 for pixel in row]
+            flat1.sort()
+            flat2.sort()
+            thresh1 = flat1[int(len(flat1) * 0.75)] if flat1 else 0
+            thresh2 = flat2[int(len(flat2) * 0.75)] if flat2 else 0
+        return float(thresh1), float(thresh2)
+
+def manders_coefficients(image1, image2, threshold1=0, threshold2=0):
     """
     Calculate Manders colocalization coefficients
     
@@ -204,7 +250,7 @@ def manders_coefficients(image1: np.ndarray, image2: np.ndarray,
     
     return m1, m2
 
-def costes_threshold(image1: np.ndarray, image2: np.ndarray) -> Tuple[float, float]:
+def costes_threshold(image1, image2):
     """
     Calculate automatic thresholds using Costes method
     
@@ -230,7 +276,7 @@ def costes_threshold(image1: np.ndarray, image2: np.ndarray) -> Tuple[float, flo
         thresh2 = np.percentile(image2, 75)
         return float(thresh1), float(thresh2)
 
-def calculate_intensity_statistics(image: np.ndarray, mask: Optional[np.ndarray] = None) -> Dict:
+def calculate_intensity_statistics(image, mask=None):
     """
     Calculate comprehensive intensity statistics for an image
     
@@ -267,7 +313,7 @@ def calculate_intensity_statistics(image: np.ndarray, mask: Optional[np.ndarray]
     
     return stats_dict
 
-def analyze_spatial_distribution(coordinates: np.ndarray) -> Dict:
+def analyze_spatial_distribution(coordinates):
     """
     Analyze spatial distribution of points/objects
     
@@ -341,7 +387,7 @@ def analyze_spatial_distribution(coordinates: np.ndarray) -> Dict:
     
     return stats_dict
 
-def calculate_surface_statistics(vertices: np.ndarray, faces: np.ndarray) -> Dict[str, float]:
+def calculate_surface_statistics(vertices, faces):
     """
     Calculate statistics for 3D surface meshes
     
@@ -412,7 +458,7 @@ def calculate_surface_statistics(vertices: np.ndarray, faces: np.ndarray) -> Dic
     
     return stats_dict
 
-def create_analysis_report(results: Dict, output_format: str = 'dict') -> Union[Dict, str, pd.DataFrame]:
+def create_analysis_report(results, output_format='dict'):
     """
     Create formatted analysis report from results
     
@@ -464,9 +510,7 @@ def create_analysis_report(results: Dict, output_format: str = 'dict') -> Union[
     else:
         raise ValueError(f"Unsupported output format: {output_format}")
 
-def batch_analysis(image_list: List[np.ndarray], 
-                  analysis_functions: List,
-                  function_kwargs: Optional[List[Dict]] = None) -> List:
+def batch_analysis(image_list, analysis_functions, function_kwargs=None):
     """
     Perform batch analysis on multiple images
     
@@ -500,7 +544,7 @@ def batch_analysis(image_list: List[np.ndarray],
     
     return results
 
-def quality_assessment(image: np.ndarray) -> Dict:
+def quality_assessment(image):
     """
     Assess image quality metrics
     
@@ -549,3 +593,87 @@ def quality_assessment(image: np.ndarray) -> Dict:
         metrics['error'] = str(e)
     
     return metrics
+
+def four_param_logistic(x, A, B, C, D):
+    """4PL logistic function for dose-response curves."""
+    return D + (A - D) / (1 + (x / C)**B)
+
+def fit_dose_response(concentrations, responses):
+    """
+    Fits a 4PL model to dose-response data to find the IC50.
+    
+    Args:
+        concentrations (list): List of drug concentrations.
+        responses (list): List of corresponding cellular responses (e.g., mean intensity).
+        
+    Returns:
+        dict: A dictionary containing the fitted parameters, including IC50.
+    """
+    if len(concentrations) < 4 or len(responses) < 4:
+        return {"error": "Insufficient data for 4PL fit."}
+        
+    try:
+        try:
+            from scipy.optimize import curve_fit
+            import numpy as np
+            
+            # Convert to numpy arrays
+            x_data = np.array(concentrations)
+            y_data = np.array(responses)
+            
+            p0 = [np.min(y_data), 1, np.median(x_data), np.max(y_data)]
+            params, _ = curve_fit(four_param_logistic, x_data, y_data, p0=p0, maxfev=10000)
+            
+            ic50 = params[2]  # C parameter is the IC50
+            
+            return {
+                'ic50': ic50,
+                'min_response': params[0],  # A parameter
+                'hill_slope': params[1],    # B parameter
+                'max_response': params[3],  # D parameter
+                'fit_method': 'scipy_curve_fit'
+            }
+            
+        except ImportError:
+            # Fallback to simple estimation if scipy not available
+            return estimate_ic50_simple(concentrations, responses)
+            
+    except RuntimeError:
+        return {"error": "Dose-response curve fit failed."}
+
+def estimate_ic50_simple(concentrations, responses):
+    """
+    Simple IC50 estimation without scipy dependency.
+    Finds the concentration closest to 50% response.
+    """
+    try:
+        min_resp = min(responses)
+        max_resp = max(responses)
+        
+        if max_resp == min_resp:
+            return {"error": "No response variation in data"}
+            
+        normalized = [(r - min_resp) / (max_resp - min_resp) * 100 for r in responses]
+        
+        target = 50.0
+        best_idx = 0
+        best_diff = abs(normalized[0] - target)
+        
+        for i, norm_resp in enumerate(normalized):
+            diff = abs(norm_resp - target)
+            if diff < best_diff:
+                best_diff = diff
+                best_idx = i
+        
+        ic50_estimate = concentrations[best_idx]
+        
+        return {
+            'ic50': ic50_estimate,
+            'min_response': min_resp,
+            'max_response': max_resp,
+            'fit_method': 'simple_estimation',
+            'closest_response_percent': normalized[best_idx]
+        }
+        
+    except Exception as e:
+        return {"error": f"Simple IC50 estimation failed: {str(e)}"}

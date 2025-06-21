@@ -43,6 +43,14 @@ def main():
         area='left'
     )
     
+    try:
+        from widgets.hca_widget import HighContentAnalysisWidget
+        hca_widget = HighContentAnalysisWidget(viewer)
+        viewer.window.add_dock_widget(hca_widget, name="High-Content Analysis", area="right")
+        print("✓ HCA widget loaded successfully")
+    except ImportError as e:
+        print(f"⚠ HCA widget not available: {e}")
+    
     print("\nPyMaris application is ready with advanced widgets.")
     print("Go to File > Open... to load an image.")
 
