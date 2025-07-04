@@ -7,17 +7,17 @@ import numpy as np
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QSlider, QSpinBox, QDoubleSpinBox, 
                              QComboBox, QGroupBox, QCheckBox, QProgressBar)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 import napari
 from napari.layers import Image
 
-from scipy.ndimage import gaussian_filter, median_filter, binary_opening, binary_closing
+from scipy.ndimage import gaussian_filter, median_filter
 from scipy.signal import convolve
-from skimage import morphology
+from skimage import morphology, exposure
 from skimage.restoration import denoise_bilateral
 from skimage.filters import threshold_local
 
-from utils.image_utils import validate_image_layer, estimate_processing_time
+from utils.image_utils import validate_image_layer
 
 try:
     from advanced_analysis import AIDenoising
@@ -381,11 +381,7 @@ class ProcessingWidget(QWidget):
                 data = gaussian_filter(data, sigma=self.gauss_sigma.value())
                 
             if self.gamma_value.value() != 1.0:
-                try:
-                    from skimage import exposure
-                    data = exposure.adjust_gamma(data, gamma=self.gamma_value.value())
-                except ImportError:
-                    pass
+                data = exposure.adjust_gamma(data, gamma=self.gamma_value.value())
                 
             # Update or create preview layer
             preview_name = f"{layer.name}_preview"
