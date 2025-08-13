@@ -10,6 +10,8 @@ from widgets.segmentation_widget import SegmentationWidget
 from widgets.analysis_widget import AnalysisWidget
 from widgets.visualization_widget import VisualizationWidget
 from widgets.file_io_widget import FileIOWidget
+from widgets.deconvolution_widget import DeconvolutionWidget
+from widgets.statistics_widget import StatisticsWidget
 
 def main():
     """Main entry point for Napari application"""
@@ -41,6 +43,16 @@ def main():
         VisualizationWidget(viewer),
         name="3D Visualization",
         area='left'
+    )
+    viewer.window.add_dock_widget(
+        DeconvolutionWidget(viewer),
+        name="Deconvolution",
+        area='left'
+    )
+    viewer.window.add_dock_widget(
+        StatisticsWidget(viewer),
+        name="Statistics",
+        area='right'
     )
     
     try:
