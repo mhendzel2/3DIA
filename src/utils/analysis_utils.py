@@ -7,12 +7,65 @@ import math
 try:
     import numpy as np
     from scipy import ndimage, stats
-    from skimage import measure, morphology
+    from skimage import measure, morphology, feature, segmentation, filters
     import pandas as pd
+    from PIL import Image
+    from cellpose import models
+    from stardist.models import StarDist2D
+    from csbdeep.utils import normalize
     HAS_SCIENTIFIC_LIBS = True
 except ImportError:
     HAS_SCIENTIFIC_LIBS = False
-    print("Warning: numpy, scipy, or scikit-image not found. Using pure Python fallbacks.")
+    print("Warning: numpy, scipy, scikit-image, cellpose, or stardist not found. Using pure Python fallbacks.")
+
+def load_image(file_path):
+    """Load image and convert to numpy array."""
+    if not HAS_SCIENTIFIC_LIBS:
+        return None
+    try:
+        with Image.open(file_path) as img:
+            return np.array(img.convert('L')) # Convert to grayscale
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        return None
+
+def segment_cellpose(image, diameter=30):
+    """
+    Segment cells using the real Cellpose model.
+    """
+    if not HAS_SCIENTIFIC_LIBS:
+        print("Cellpose not available.")
+        return None
+    model = models.Cellpose(model_type='cyto')
+    masks, _, _, _ = model.eval(image, diameter=diameter, channels=[0,0])
+    return masks
+
+def segment_stardist(image):
+    """
+    Segment nuclei using the real StarDist model.
+    """
+    if not HAS_SCIENTIFIC_LIBS:
+        print("StarDist not available.")
+        return None
+    model = StarDist2D.from_pretrained('2D_versatile_fluo')
+    img_norm = normalize(image, 1, 99.8, axis=(0,1))
+    labels, _ = model.predict_instances(img_norm)
+    return labels
+
+def segment_watershed(image):
+    """
+    Segment using a standard watershed algorithm.
+    """
+    if not HAS_SCIENTIFIC_LIBS:
+        print("Watershed not available.")
+        return None
+    distance = ndi.distance_transform_edt(image)
+    coords = feature.peak_local_max(distance, footprint=np.ones((3, 3)), labels=image)
+    mask = np.zeros(distance.shape, dtype=bool)
+    mask[tuple(coords.T)] = True
+    markers, _ = ndi.label(mask)
+    labels = segmentation.watershed(-distance, markers, mask=image)
+    return labels
 
 def calculate_object_statistics(labeled_image, intensity_image=None, properties=None):
     """
@@ -677,3 +730,42 @@ def estimate_ic50_simple(concentrations, responses):
         
     except Exception as e:
         return {"error": f"Simple IC50 estimation failed: {str(e)}"}
+
+def array_to_image(array):
+    """Convert array back to PIL Image"""
+    if not HAS_SCIENTIFIC_LIBS:
+        return None
+
+    if not isinstance(array, np.ndarray):
+        array = np.array(array)
+
+    # Normalize to 0-255
+    min_val, max_val = np.min(array), np.max(array)
+
+    if max_val > min_val:
+        normalized = (array - min_val) * 255 / (max_val - min_val)
+    else:
+        normalized = array
+
+    img = Image.fromarray(normalized.astype(np.uint8))
+    return img
+
+def create_label_overlay(image, labels):
+    """Create colored overlay of labels on original image"""
+    if not HAS_SCIENTIFIC_LIBS:
+        return image # return original image if no libs
+
+    if not isinstance(image, np.ndarray):
+        image = np.array(image)
+    if not isinstance(labels, np.ndarray):
+        labels = np.array(labels)
+
+    # Create an RGB image
+    overlay = np.stack([image.astype(np.uint8)]*3, axis=-1)
+
+    # Find boundaries and color them red
+    boundaries = segmentation.find_boundaries(labels, mode='thick')
+    overlay[boundaries] = [255, 0, 0] # Red boundaries
+
+    # Convert to PIL image for sending to frontend
+    return Image.fromarray(overlay)

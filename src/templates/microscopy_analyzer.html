@@ -159,11 +159,6 @@
                                     <span id="cellpose-diameter-value">30</span>
                                 </div>
                                 
-                                <div class="parameter-group">
-                                    <label for="cellpose-flow-threshold">Flow Threshold:</label>
-                                    <input type="range" id="cellpose-flow-threshold" min="0" max="1" step="0.1" value="0.4" class="form-control">
-                                    <span id="cellpose-flow-threshold-value">0.4</span>
-                                </div>
                                 
                                 <button id="run-cellpose" class="btn btn-primary btn-block" disabled>
                                     <i class="fas fa-play"></i> Run Cellpose
@@ -175,17 +170,6 @@
                                 <h4><i class="fas fa-star"></i> StarDist (Nucleus Segmentation)</h4>
                                 <p class="plugin-description">Star-convex object segmentation optimized for nuclei</p>
                                 
-                                <div class="parameter-group">
-                                    <label for="stardist-prob-thresh">Probability Threshold:</label>
-                                    <input type="range" id="stardist-prob-thresh" min="0" max="1" step="0.05" value="0.5" class="form-control">
-                                    <span id="stardist-prob-thresh-value">0.5</span>
-                                </div>
-                                
-                                <div class="parameter-group">
-                                    <label for="stardist-nms-thresh">NMS Threshold:</label>
-                                    <input type="range" id="stardist-nms-thresh" min="0" max="1" step="0.05" value="0.4" class="form-control">
-                                    <span id="stardist-nms-thresh-value">0.4</span>
-                                </div>
                                 
                                 <button id="run-stardist" class="btn btn-primary btn-block" disabled>
                                     <i class="fas fa-play"></i> Run StarDist
@@ -440,13 +424,13 @@
     <footer>
         <div class="footer-content">
             <div class="plugin-credits">
-                <h4>Integrated Napari Hub Plugins</h4>
+            <h4>Powered By</h4>
                 <div class="plugin-list">
-                    <span class="plugin-badge">napari-cellpose</span>
-                    <span class="plugin-badge">napari-stardist</span>
-                    <span class="plugin-badge">napari-skimage-regionprops</span>
-                    <span class="plugin-badge">napari-btrack</span>
-                    <span class="plugin-badge">napari-clusters-plotter</span>
+                <span class="plugin-badge">Cellpose</span>
+                <span class="plugin-badge">StarDist</span>
+                <span class="plugin-badge">scikit-image</span>
+                <span class="plugin-badge">numpy</span>
+                <span class="plugin-badge">scipy</span>
                 </div>
             </div>
             <div class="app-info">
@@ -593,10 +577,6 @@
             const parameters = {};
             if (method === 'cellpose') {
                 parameters.diameter = parseInt(document.getElementById('cellpose-diameter').value);
-                parameters.flow_threshold = parseFloat(document.getElementById('cellpose-flow-threshold').value);
-            } else if (method === 'stardist') {
-                parameters.prob_thresh = parseFloat(document.getElementById('stardist-prob-thresh').value);
-                parameters.nms_thresh = parseFloat(document.getElementById('stardist-nms-thresh').value);
             }
 
             showStatus(`Running ${method} segmentation...`, 'info');
