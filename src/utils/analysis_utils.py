@@ -4,23 +4,47 @@ Provides statistical analysis and colocalization utilities with robust fallbacks
 """
 import math
 
+"""
+Import scientific stack with robust, granular fallbacks so a single optional
+dependency (e.g., stardist) never breaks the whole app.
+"""
 try:
     import numpy as np
     from scipy import ndimage, stats
+    import scipy.ndimage as _scipy_ndimage  # ensure alias if needed
     from skimage import measure, morphology, feature, segmentation, filters
     import pandas as pd
     from PIL import Image
-    from cellpose import models
-    from stardist.models import StarDist2D
-    from csbdeep.utils import normalize
     HAS_SCIENTIFIC_LIBS = True
 except ImportError:
     HAS_SCIENTIFIC_LIBS = False
-    print("Warning: numpy, scipy, scikit-image, cellpose, or stardist not found. Using pure Python fallbacks.")
+    # Keep a minimal shim to avoid NameErrors in fallbacks
+    np = None  # type: ignore
+    stats = None  # type: ignore
+    measure = morphology = feature = segmentation = filters = None  # type: ignore
+    Image = None  # type: ignore
+    print("Warning: numpy/scipy/scikit-image not found. Using pure Python fallbacks.")
+
+# Optional: Cellpose
+try:
+    from cellpose import models as _cellpose_models
+    CELLPOSE_AVAILABLE = True
+except Exception:
+    CELLPOSE_AVAILABLE = False
+
+# Optional: StarDist (can fail due to NumPy ABI mismatch); never block app
+try:
+    from stardist.models import StarDist2D as _StarDist2D
+    from csbdeep.utils import normalize as _normalize
+    STARDIST_AVAILABLE = True
+except Exception as _e:
+    STARDIST_AVAILABLE = False
+    # Be quiet by default; noisy stacks confuse users. Uncomment for debug:
+    # print(f"Stardist unavailable ({_e}). Continuing without it.")
 
 def load_image(file_path):
     """Load image and convert to numpy array."""
-    if not HAS_SCIENTIFIC_LIBS:
+    if not HAS_SCIENTIFIC_LIBS or Image is None:
         return None
     try:
         with Image.open(file_path) as img:
@@ -33,10 +57,10 @@ def segment_cellpose(image, diameter=30):
     """
     Segment cells using the real Cellpose model.
     """
-    if not HAS_SCIENTIFIC_LIBS:
+    if not (HAS_SCIENTIFIC_LIBS and CELLPOSE_AVAILABLE):
         print("Cellpose not available.")
         return None
-    model = models.Cellpose(model_type='cyto')
+    model = _cellpose_models.Cellpose(model_type='cyto')
     masks, _, _, _ = model.eval(image, diameter=diameter, channels=[0,0])
     return masks
 
@@ -44,11 +68,11 @@ def segment_stardist(image):
     """
     Segment nuclei using the real StarDist model.
     """
-    if not HAS_SCIENTIFIC_LIBS:
+    if not (HAS_SCIENTIFIC_LIBS and STARDIST_AVAILABLE):
         print("StarDist not available.")
         return None
-    model = StarDist2D.from_pretrained('2D_versatile_fluo')
-    img_norm = normalize(image, 1, 99.8, axis=(0,1))
+    model = _StarDist2D.from_pretrained('2D_versatile_fluo')
+    img_norm = _normalize(image, 1, 99.8, axis=(0,1))
     labels, _ = model.predict_instances(img_norm)
     return labels
 
@@ -59,11 +83,12 @@ def segment_watershed(image):
     if not HAS_SCIENTIFIC_LIBS:
         print("Watershed not available.")
         return None
-    distance = ndi.distance_transform_edt(image)
+    # Use the properly imported scipy.ndimage module
+    distance = ndimage.distance_transform_edt(image)
     coords = feature.peak_local_max(distance, footprint=np.ones((3, 3)), labels=image)
     mask = np.zeros(distance.shape, dtype=bool)
     mask[tuple(coords.T)] = True
-    markers, _ = ndi.label(mask)
+    markers, _ = ndimage.label(mask)
     labels = segmentation.watershed(-distance, markers, mask=image)
     return labels
 
