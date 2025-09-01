@@ -260,132 +260,132 @@ class AnalysisWidget(QWidget):
     def create_colocalization_tab(self):
         """Create colocalization analysis tab"""
         tab = QWidget()
-        
+
         # Create splitter for layout
         splitter = QSplitter(Qt.Orientation.Vertical)
-        
+
         # Top part: Controls
         controls_widget = QWidget()
         controls_layout = QVBoxLayout(controls_widget)
-        
+
         # Channel selection
         channels_group = QGroupBox("Select Channels")
         channels_layout = QVBoxLayout()
-        
-    # Channel 1
-    ch1_layout = QHBoxLayout()
-    ch1_layout.addWidget(QLabel("Channel 1:"))
-    self.channel1_combo = QComboBox()
-    ch1_layout.addWidget(self.channel1_combo)
-    channels_layout.addLayout(ch1_layout)
-        
-    # Channel 2
-    ch2_layout = QHBoxLayout()
-    ch2_layout.addWidget(QLabel("Channel 2:"))
-    self.channel2_combo = QComboBox()
-    ch2_layout.addWidget(self.channel2_combo)
-    channels_layout.addLayout(ch2_layout)
-        
-    # Populate combos now that they exist and keep them updated with layer changes
-    self.update_layer_choices()
-    self.viewer.layers.events.inserted.connect(self.update_layer_choices)
-    self.viewer.layers.events.removed.connect(self.update_layer_choices)
-        
+
+        # Channel 1
+        ch1_layout = QHBoxLayout()
+        ch1_layout.addWidget(QLabel("Channel 1:"))
+        self.channel1_combo = QComboBox()
+        ch1_layout.addWidget(self.channel1_combo)
+        channels_layout.addLayout(ch1_layout)
+
+        # Channel 2
+        ch2_layout = QHBoxLayout()
+        ch2_layout.addWidget(QLabel("Channel 2:"))
+        self.channel2_combo = QComboBox()
+        ch2_layout.addWidget(self.channel2_combo)
+        channels_layout.addLayout(ch2_layout)
+
+        # Populate combos now that they exist and keep them updated with layer changes
+        self.update_layer_choices()
+        self.viewer.layers.events.inserted.connect(self.update_layer_choices)
+        self.viewer.layers.events.removed.connect(self.update_layer_choices)
+
         channels_group.setLayout(channels_layout)
         controls_layout.addWidget(channels_group)
-        
+
         # Analysis options
         options_group = QGroupBox("Analysis Options")
         options_layout = QVBoxLayout()
-        
+
         # Thresholding
         threshold_layout = QHBoxLayout()
         self.use_threshold_check = QCheckBox("Use intensity thresholds")
         self.use_threshold_check.toggled.connect(self.toggle_threshold_controls)
         threshold_layout.addWidget(self.use_threshold_check)
         options_layout.addLayout(threshold_layout)
-        
+
         # Threshold values
         self.threshold_controls = QWidget()
         thresh_layout = QHBoxLayout(self.threshold_controls)
-        
+
         thresh_layout.addWidget(QLabel("Ch1 threshold:"))
         self.threshold1_spin = QSpinBox()
         self.threshold1_spin.setRange(0, 65535)
         self.threshold1_spin.setValue(100)
         thresh_layout.addWidget(self.threshold1_spin)
-        
+
         thresh_layout.addWidget(QLabel("Ch2 threshold:"))
         self.threshold2_spin = QSpinBox()
         self.threshold2_spin.setRange(0, 65535)
         self.threshold2_spin.setValue(100)
         thresh_layout.addWidget(self.threshold2_spin)
-        
+
         self.threshold_controls.setEnabled(False)
         options_layout.addWidget(self.threshold_controls)
-        
+
         # Auto-threshold options
         auto_thresh_layout = QHBoxLayout()
         self.auto_threshold_btn = QPushButton("Auto Threshold (Otsu)")
         self.auto_threshold_btn.clicked.connect(self.calculate_auto_thresholds)
         self.auto_threshold_btn.setEnabled(False)
         auto_thresh_layout.addWidget(self.auto_threshold_btn)
-        
+
         self.use_costes_check = QCheckBox("Use Costes method")
         auto_thresh_layout.addWidget(self.use_costes_check)
-        
+
         options_layout.addLayout(auto_thresh_layout)
-        
+
         # Coefficient options
         coeff_layout = QHBoxLayout()
         self.manders_check = QCheckBox("Calculate Manders coefficients")
         self.manders_check.setChecked(True)
         coeff_layout.addWidget(self.manders_check)
-        
+
         self.overlap_check = QCheckBox("Calculate overlap coefficients")
         self.overlap_check.setChecked(True)
         coeff_layout.addWidget(self.overlap_check)
-        
+
         options_layout.addLayout(coeff_layout)
-        
+
         options_group.setLayout(options_layout)
         controls_layout.addWidget(options_group)
-        
+
         # Analysis button
         self.analyze_btn = QPushButton("Analyze Colocalization")
         self.analyze_btn.clicked.connect(self.analyze_colocalization)
         controls_layout.addWidget(self.analyze_btn)
-        
+
         # Export buttons
         export_layout = QHBoxLayout()
         self.export_analysis_btn = QPushButton("Export Analysis Results")
         self.export_analysis_btn.clicked.connect(self.export_analysis_results)
         self.export_analysis_btn.setEnabled(False)
         export_layout.addWidget(self.export_analysis_btn)
-        
+
         self.export_report_btn = QPushButton("Export PDF Report")
         self.export_report_btn.clicked.connect(self.export_analysis_report)
         self.export_report_btn.setEnabled(False)
         export_layout.addWidget(self.export_report_btn)
-        
+
         controls_layout.addLayout(export_layout)
-        
+
         splitter.addWidget(controls_widget)
-        
+
         # Bottom part: Results display
         results_widget = QWidget()
         results_layout = QVBoxLayout(results_widget)
-        
+
         # Plot widget
         self.plot_widget = PlotWidget()
         results_layout.addWidget(self.plot_widget)
-        
+
         splitter.addWidget(results_widget)
         splitter.setSizes([300, 500])  # Allocate more space to plots
-        
+
         tab_layout = QVBoxLayout(tab)
         tab_layout.addWidget(splitter)
-        
+
         return tab
         
     def create_statistics_tab(self):
