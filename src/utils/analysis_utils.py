@@ -25,22 +25,14 @@ except ImportError:
     Image = None  # type: ignore
     print("Warning: numpy/scipy/scikit-image not found. Using pure Python fallbacks.")
 
-# Optional: Cellpose
-try:
-    from cellpose import models as _cellpose_models
-    CELLPOSE_AVAILABLE = True
-except Exception:
-    CELLPOSE_AVAILABLE = False
+import importlib.util
 
-# Optional: StarDist (can fail due to NumPy ABI mismatch); never block app
-try:
-    from stardist.models import StarDist2D as _StarDist2D
-    from csbdeep.utils import normalize as _normalize
-    STARDIST_AVAILABLE = True
-except Exception as _e:
-    STARDIST_AVAILABLE = False
-    # Be quiet by default; noisy stacks confuse users. Uncomment for debug:
-    # print(f"Stardist unavailable ({_e}). Continuing without it.")
+# Optional libs: detect presence without importing to avoid ABI import errors
+CELLPOSE_AVAILABLE = importlib.util.find_spec("cellpose") is not None
+STARDIST_AVAILABLE = (
+    importlib.util.find_spec("stardist") is not None
+    and importlib.util.find_spec("csbdeep") is not None
+)
 
 def load_image(file_path):
     """Load image and convert to numpy array."""
@@ -60,6 +52,12 @@ def segment_cellpose(image, diameter=30):
     if not (HAS_SCIENTIFIC_LIBS and CELLPOSE_AVAILABLE):
         print("Cellpose not available.")
         return None
+    # Import lazily to avoid import-time failures if environment is incompatible
+    try:
+        from cellpose import models as _cellpose_models  # type: ignore
+    except Exception as e:
+        print(f"Cellpose import failed at runtime: {e}")
+        return None
     model = _cellpose_models.Cellpose(model_type='cyto')
     masks, _, _, _ = model.eval(image, diameter=diameter, channels=[0,0])
     return masks
@@ -70,6 +68,12 @@ def segment_stardist(image):
     """
     if not (HAS_SCIENTIFIC_LIBS and STARDIST_AVAILABLE):
         print("StarDist not available.")
+        return None
+    try:
+        from stardist.models import StarDist2D as _StarDist2D  # type: ignore
+        from csbdeep.utils import normalize as _normalize  # type: ignore
+    except Exception as e:
+        print(f"StarDist import failed at runtime: {e}")
         return None
     model = _StarDist2D.from_pretrained('2D_versatile_fluo')
     img_norm = _normalize(image, 1, 99.8, axis=(0,1))

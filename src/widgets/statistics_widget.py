@@ -9,8 +9,13 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel,
 from PyQt6.QtCore import QAbstractTableModel, Qt
 import napari
 from skimage.measure import regionprops_table
-import seaborn as sns
 import matplotlib.pyplot as plt
+# Make seaborn optional to avoid startup failures when it's not installed
+try:
+    import seaborn as sns  # type: ignore
+    HAS_SEABORN = True
+except Exception:
+    HAS_SEABORN = False
 
 class PandasModel(QAbstractTableModel):
     """A model to interface a pandas DataFrame with QTableView"""
@@ -142,10 +147,16 @@ class StatisticsWidget(QWidget):
 
         plt.figure()
         if plot_type == "Histogram":
-            sns.histplot(self.dataframe[column], kde=True)
+            if HAS_SEABORN:
+                sns.histplot(self.dataframe[column], kde=True)
+            else:
+                plt.hist(self.dataframe[column].astype(float), bins=30, edgecolor='black', alpha=0.7)
             plt.title(f"Histogram of {column}")
         elif plot_type == "Box Plot":
-            sns.boxplot(y=self.dataframe[column])
+            if HAS_SEABORN:
+                sns.boxplot(y=self.dataframe[column])
+            else:
+                plt.boxplot(self.dataframe[column].astype(float).dropna(), vert=True)
             plt.title(f"Box Plot of {column}")
 
         plt.show()

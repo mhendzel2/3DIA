@@ -5,7 +5,15 @@ Provides colocalization analysis and statistical measurements
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
+# Robust backend import: try Qt6, then unified QtAgg, then Qt5
+try:
+    from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
+except Exception:
+    try:
+        # Matplotlib >=3.6 unified Qt backend
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas  # type: ignore
+    except Exception:
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas  # type: ignore
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QSpinBox, QDoubleSpinBox, QComboBox, 
@@ -264,21 +272,24 @@ class AnalysisWidget(QWidget):
         channels_group = QGroupBox("Select Channels")
         channels_layout = QVBoxLayout()
         
-        # Channel 1
-        ch1_layout = QHBoxLayout()
-        ch1_layout.addWidget(QLabel("Channel 1:"))
-        self.channel1_combo = QComboBox()
-        self.update_layer_choices()
-        ch1_layout.addWidget(self.channel1_combo)
-        channels_layout.addLayout(ch1_layout)
+    # Channel 1
+    ch1_layout = QHBoxLayout()
+    ch1_layout.addWidget(QLabel("Channel 1:"))
+    self.channel1_combo = QComboBox()
+    ch1_layout.addWidget(self.channel1_combo)
+    channels_layout.addLayout(ch1_layout)
         
-        # Channel 2
-        ch2_layout = QHBoxLayout()
-        ch2_layout.addWidget(QLabel("Channel 2:"))
-        self.channel2_combo = QComboBox()
-        self.update_layer_choices()
-        ch2_layout.addWidget(self.channel2_combo)
-        channels_layout.addLayout(ch2_layout)
+    # Channel 2
+    ch2_layout = QHBoxLayout()
+    ch2_layout.addWidget(QLabel("Channel 2:"))
+    self.channel2_combo = QComboBox()
+    ch2_layout.addWidget(self.channel2_combo)
+    channels_layout.addLayout(ch2_layout)
+        
+    # Populate combos now that they exist and keep them updated with layer changes
+    self.update_layer_choices()
+    self.viewer.layers.events.inserted.connect(self.update_layer_choices)
+    self.viewer.layers.events.removed.connect(self.update_layer_choices)
         
         channels_group.setLayout(channels_layout)
         controls_layout.addWidget(channels_group)
