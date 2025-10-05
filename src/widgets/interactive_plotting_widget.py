@@ -5,7 +5,23 @@ Supports interactive gating between plots and the napari viewer.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
+
+# Robust matplotlib backend import: try Qt6, then unified QtAgg, then Qt5
+try:
+    from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
+except ImportError:
+    try:
+        # Matplotlib >=3.6 unified Qt backend
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    except ImportError:
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, 
+                             QComboBox, QGroupBox)
+import napari
+from napari.layers import Image, Labels
+
+from utils.analysis_utils import calculate_object_statistics
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, 
                              QComboBox, QGroupBox)
 import napari

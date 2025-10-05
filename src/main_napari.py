@@ -12,6 +12,9 @@ from widgets.visualization_widget import VisualizationWidget
 from widgets.file_io_widget import FileIOWidget
 from widgets.deconvolution_widget import DeconvolutionWidget
 from widgets.statistics_widget import StatisticsWidget
+from widgets.volume_rendering_widget import VolumeRenderingWidget
+from widgets.filament_tracing_widget import FilamentTracingWidget
+from widgets.tracking_widget import AdvancedTrackingWidget
 
 def main():
     """Main entry point for Napari application"""
@@ -55,6 +58,25 @@ def main():
         area='right'
     )
     
+    # Add new Imaris-like features
+    viewer.window.add_dock_widget(
+        VolumeRenderingWidget(viewer),
+        name="Volume Rendering",
+        area='right'
+    )
+    
+    viewer.window.add_dock_widget(
+        FilamentTracingWidget(viewer),
+        name="Filament Tracing",
+        area='right'
+    )
+    
+    viewer.window.add_dock_widget(
+        AdvancedTrackingWidget(viewer),
+        name="Cell Tracking & Lineage",
+        area='right'
+    )
+    
     try:
         from widgets.hca_widget import HighContentAnalysisWidget
         hca_widget = HighContentAnalysisWidget(viewer)
@@ -64,6 +86,10 @@ def main():
         print(f"⚠ HCA widget not available: {e}")
     
     print("\nPyMaris application is ready with advanced widgets.")
+    print("New Imaris-like features:")
+    print("  • Volume Rendering (MIP, Alpha Blending, Orthogonal Views, Clipping)")
+    print("  • Filament Tracing (Neuron/Cytoskeleton Analysis)")
+    print("  • Advanced Cell Tracking (Lineage Trees, Gap Closing, Division Detection)")
     print("Go to File > Open... to load an image.")
 
     # 3. Start the Napari event loop.

@@ -11,6 +11,13 @@ import time
 from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 
+try:
+    from scipy import ndimage
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+    ndimage = None
+
 class ImageAligner:
     """2D image alignment for timelapse sequences"""
     
