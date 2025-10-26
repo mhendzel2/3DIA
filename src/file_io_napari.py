@@ -27,8 +27,7 @@ try:
 except ImportError:
     SKIMAGE_AVAILABLE = False
 
-@napari.hook_implementation
-def napari_get_reader(path):
+def get_reader(path):
     """
     A Napari reader hook that supports various microscopy formats.
     
@@ -51,7 +50,7 @@ def read_microscopy_file(path):
     """
     try:
         # Try different readers in order of preference
-        if AICSIMAGEIO_AVAILABLE and any(path.endswith(ext) for ext in ['.czi', '.lif', '.nd2', '.oib']):
+        if AICSIMAGEIO_AVAILABLE and any(path.endswith(ext) for ext in ['.czi', '.lif', '.nd2', '.oib', '.tif', '.tiff']):
             return read_with_aicsimageio(path)
         elif TIFFFILE_AVAILABLE and path.endswith(('.tif', '.tiff')):
             return read_with_tifffile(path)
@@ -67,7 +66,7 @@ def read_microscopy_file(path):
 def read_with_aicsimageio(path):
     """Read using AICSImageIO for specialized microscopy formats"""
     img = AICSImage(path)
-    data = img.get_image_data("TCZYX", S=0).squeeze()
+    data = img.get_image_dask_data("TCZYX", S=0).squeeze()
 
     scale = [
         img.physical_pixel_sizes.Z if img.physical_pixel_sizes.Z is not None else 1.0,
@@ -137,3 +136,8 @@ def read_basic(path):
     except Exception as e:
         print(f"Basic reader failed: {e}")
         return None
+
+def write_tiff(path: str, data: np.ndarray, metadata: dict) -> str:
+    """Writes a TIFF file."""
+    tifffile.imwrite(path, data)
+    return path
