@@ -12,9 +12,9 @@ from widgets.visualization_widget import VisualizationWidget
 from widgets.file_io_widget import FileIOWidget
 from widgets.deconvolution_widget import DeconvolutionWidget
 from widgets.statistics_widget import StatisticsWidget
-from widgets.volume_rendering_widget import VolumeRenderingWidget
 from widgets.filament_tracing_widget import FilamentTracingWidget
 from widgets.tracking_widget import AdvancedTrackingWidget
+from widgets.magicgui_analysis_widget import simple_threshold_widget, adaptive_threshold_widget
 
 def main():
     """Main entry point for Napari application"""
@@ -60,12 +60,6 @@ def main():
     
     # Add new Imaris-like features
     viewer.window.add_dock_widget(
-        VolumeRenderingWidget(viewer),
-        name="Volume Rendering",
-        area='right'
-    )
-    
-    viewer.window.add_dock_widget(
         FilamentTracingWidget(viewer),
         name="Filament Tracing",
         area='right'
@@ -77,6 +71,10 @@ def main():
         area='right'
     )
     
+    # Add magicgui widgets
+    viewer.window.add_dock_widget(simple_threshold_widget, name="Simple Threshold", area="left")
+    viewer.window.add_dock_widget(adaptive_threshold_widget, name="Adaptive Threshold", area="left")
+
     try:
         from widgets.hca_widget import HighContentAnalysisWidget
         hca_widget = HighContentAnalysisWidget(viewer)
