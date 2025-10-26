@@ -22,6 +22,15 @@ setup(
     # By using include_package_data=True and a MANIFEST.in file,
     # we ensure that non-Python files like napari.yaml are included.
     include_package_data=True,
+    install_requires=[
+        'napari',
+        'aicsimageio',
+        'dask',
+        'tifffile',
+        'scikit-image',
+        'numpy',
+        'Pillow',
+    ],
     entry_points={
         'napari.manifest': [
             'scientific-image-analyzer = napari.yaml',
