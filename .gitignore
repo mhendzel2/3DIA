@@ -1,171 +1,178 @@
-.venv/Lib/site-packages/HeapDict-1.0.1.dist-info/INSTALLER
-.venv/Lib/site-packages/HeapDict-1.0.1.dist-info/LICENSE
-.venv/Lib/site-packages/HeapDict-1.0.1.dist-info/METADATA
-.venv/Lib/site-packages/HeapDict-1.0.1.dist-info/RECORD
-.venv/Lib/site-packages/HeapDict-1.0.1.dist-info/top_level.txt
-.venv/Lib/site-packages/HeapDict-1.0.1.dist-info/WHEEL
-.venv/Lib/site-packages/HeapDict-1.0.1.dist-info/zip-safe
-.venv/Lib/site-packages/IPython/__init__.py
-.venv/Lib/site-packages/IPython/__main__.py
-.venv/Lib/site-packages/IPython/display.py
-.venv/Lib/site-packages/IPython/paths.py
-.venv/Lib/site-packages/IPython/py.typed
-.venv/Lib/site-packages/IPython/__pycache__/__init__.cpython-312.pyc
-.venv/Lib/site-packages/IPython/__pycache__/__main__.cpython-312.pyc
-.venv/Lib/site-packages/IPython/__pycache__/display.cpython-312.pyc
-.venv/Lib/site-packages/IPython/__pycache__/paths.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__init__.py
-.venv/Lib/site-packages/IPython/core/alias.py
-.venv/Lib/site-packages/IPython/core/application.py
-.venv/Lib/site-packages/IPython/core/async_helpers.py
-.venv/Lib/site-packages/IPython/core/autocall.py
-.venv/Lib/site-packages/IPython/core/builtin_trap.py
-.venv/Lib/site-packages/IPython/core/compilerop.py
-.venv/Lib/site-packages/IPython/core/completer.py
-.venv/Lib/site-packages/IPython/core/completerlib.py
-.venv/Lib/site-packages/IPython/core/crashhandler.py
-.venv/Lib/site-packages/IPython/core/debugger_backport.py
-.venv/Lib/site-packages/IPython/core/debugger.py
-.venv/Lib/site-packages/IPython/core/display_functions.py
-.venv/Lib/site-packages/IPython/core/display_trap.py
-.venv/Lib/site-packages/IPython/core/display.py
-.venv/Lib/site-packages/IPython/core/displayhook.py
-.venv/Lib/site-packages/IPython/core/displaypub.py
-.venv/Lib/site-packages/IPython/core/doctb.py
-.venv/Lib/site-packages/IPython/core/error.py
-.venv/Lib/site-packages/IPython/core/events.py
-.venv/Lib/site-packages/IPython/core/extensions.py
-.venv/Lib/site-packages/IPython/core/formatters.py
-.venv/Lib/site-packages/IPython/core/getipython.py
-.venv/Lib/site-packages/IPython/core/guarded_eval.py
-.venv/Lib/site-packages/IPython/core/history.py
-.venv/Lib/site-packages/IPython/core/historyapp.py
-.venv/Lib/site-packages/IPython/core/hooks.py
-.venv/Lib/site-packages/IPython/core/inputtransformer2.py
-.venv/Lib/site-packages/IPython/core/interactiveshell.py
-.venv/Lib/site-packages/IPython/core/latex_symbols.py
-.venv/Lib/site-packages/IPython/core/logger.py
-.venv/Lib/site-packages/IPython/core/macro.py
-.venv/Lib/site-packages/IPython/core/magic_arguments.py
-.venv/Lib/site-packages/IPython/core/magic.py
-.venv/Lib/site-packages/IPython/core/oinspect.py
-.venv/Lib/site-packages/IPython/core/page.py
-.venv/Lib/site-packages/IPython/core/payload.py
-.venv/Lib/site-packages/IPython/core/payloadpage.py
-.venv/Lib/site-packages/IPython/core/prefilter.py
-.venv/Lib/site-packages/IPython/core/profileapp.py
-.venv/Lib/site-packages/IPython/core/profiledir.py
-.venv/Lib/site-packages/IPython/core/pylabtools.py
-.venv/Lib/site-packages/IPython/core/release.py
-.venv/Lib/site-packages/IPython/core/shellapp.py
-.venv/Lib/site-packages/IPython/core/splitinput.py
-.venv/Lib/site-packages/IPython/core/tbtools.py
-.venv/Lib/site-packages/IPython/core/tips.py
-.venv/Lib/site-packages/IPython/core/ultratb.py
-.venv/Lib/site-packages/IPython/core/usage.py
-.venv/Lib/site-packages/IPython/core/__pycache__/__init__.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/alias.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/application.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/async_helpers.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/autocall.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/builtin_trap.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/compilerop.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/completer.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/completerlib.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/crashhandler.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/debugger_backport.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/debugger.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/display_functions.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/display_trap.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/display.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/displayhook.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/displaypub.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/doctb.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/error.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/events.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/extensions.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/formatters.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/getipython.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/guarded_eval.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/history.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/historyapp.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/hooks.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/inputtransformer2.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/interactiveshell.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/latex_symbols.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/logger.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/macro.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/magic_arguments.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/magic.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/oinspect.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/page.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/payload.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/payloadpage.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/prefilter.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/profileapp.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/profiledir.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/pylabtools.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/release.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/shellapp.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/splitinput.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/tbtools.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/tips.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/ultratb.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/__pycache__/usage.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__init__.py
-.venv/Lib/site-packages/IPython/core/magics/ast_mod.py
-.venv/Lib/site-packages/IPython/core/magics/auto.py
-.venv/Lib/site-packages/IPython/core/magics/basic.py
-.venv/Lib/site-packages/IPython/core/magics/code.py
-.venv/Lib/site-packages/IPython/core/magics/config.py
-.venv/Lib/site-packages/IPython/core/magics/display.py
-.venv/Lib/site-packages/IPython/core/magics/execution.py
-.venv/Lib/site-packages/IPython/core/magics/extension.py
-.venv/Lib/site-packages/IPython/core/magics/history.py
-.venv/Lib/site-packages/IPython/core/magics/logging.py
-.venv/Lib/site-packages/IPython/core/magics/namespace.py
-.venv/Lib/site-packages/IPython/core/magics/osm.py
-.venv/Lib/site-packages/IPython/core/magics/packaging.py
-.venv/Lib/site-packages/IPython/core/magics/pylab.py
-.venv/Lib/site-packages/IPython/core/magics/script.py
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/__init__.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/ast_mod.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/auto.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/basic.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/code.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/config.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/display.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/execution.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/extension.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/history.cpython-312.pyc
-.venv/Lib/site-packages/IPython/core/magics/__pycache__/logging.cpython-312.pyc
-# Ignore Python virtual environment directory
-# Virtual environments
+# Python virtual environments
+venv/
 .venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
 
 # Python caches and compiled files
 __pycache__/
 *.py[cod]
-*.pyd
+*$py.class
 *.so
 *.dll
+*.dylib
 
-# Packaging / build artifacts
+# Distribution / packaging
+.Python
 build/
+develop-eggs/
 dist/
-*.egg-info/
+downloads/
+eggs/
 .eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Test and type caches
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 .pytest_cache/
-.mypy_cache/
+cover/
 
-# Jupyter
-.ipynb_checkpoints/
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/#use-with-ide
+.pdm.toml
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+ENV/
+env/
+venv/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
 
 # Editor / IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Operating System
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 .venv/Lib/site-packages/IPython/utils/log.py
 .venv/Lib/site-packages/IPython/utils/module_paths.py
 .venv/Lib/site-packages/IPython/utils/openpy.py
