@@ -14,6 +14,7 @@ from widgets.deconvolution_widget import DeconvolutionWidget
 from widgets.statistics_widget import StatisticsWidget
 from widgets.filament_tracing_widget import FilamentTracingWidget
 from widgets.tracking_widget import AdvancedTrackingWidget
+from widgets.ai_segmentation_widget import AISegmentationWidget
 from widgets.magicgui_analysis_widget import simple_threshold_widget, adaptive_threshold_widget
 
 def main():
@@ -35,6 +36,11 @@ def main():
     viewer.window.add_dock_widget(
         SegmentationWidget(viewer),
         name="Segmentation",
+        area='left'
+    )
+    viewer.window.add_dock_widget(
+        AISegmentationWidget(viewer),
+        name="AI Segmentation",
         area='left'
     )
     viewer.window.add_dock_widget(

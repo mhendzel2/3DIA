@@ -9,6 +9,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel,
                              QGroupBox, QCheckBox, QProgressBar)
 from PyQt6.QtCore import QThread, pyqtSignal
 import napari
+import os
+import requests
 
 from utils.image_utils import validate_image_layer
 
@@ -20,6 +22,31 @@ try:
 except ImportError:
     AI_MODELS_AVAILABLE = False
     print("Warning: cellpose or stardist not installed. AI Segmentation widget will be disabled.")
+
+try:
+    import torch
+    from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+    SAM_MODELS_AVAILABLE = True
+except ImportError:
+    SAM_MODELS_AVAILABLE = False
+    print("Warning: segment-anything is not installed. SAM widget will be disabled.")
+
+def get_sam_checkpoint(model_type='vit_b'):
+    if model_type == 'vit_b':
+        url = "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+        filename = "sam_vit_b_01ec64.pth"
+    else:
+        raise ValueError("Unknown SAM model type")
+
+    if not os.path.exists(filename):
+        print(f"Downloading {filename}...")
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(filename, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        print("Download complete.")
+    return filename
 
 class AISegmentationThread(QThread):
     progress = pyqtSignal(str, int)
@@ -33,8 +60,8 @@ class AISegmentationThread(QThread):
         self.params = params
 
     def run(self):
-        if not AI_MODELS_AVAILABLE:
-            self.error_occurred.emit("AI libraries (cellpose, stardist) not found.")
+        if not AI_MODELS_AVAILABLE and not SAM_MODELS_AVAILABLE:
+            self.error_occurred.emit("AI libraries not found.")
             return
 
         try:
@@ -42,6 +69,8 @@ class AISegmentationThread(QThread):
                 self.run_cellpose()
             elif self.model_name == 'stardist':
                 self.run_stardist()
+            elif self.model_name == 'sam':
+                self.run_sam()
         except Exception as e:
             self.error_occurred.emit(f"AI model error: {str(e)}")
 
@@ -71,6 +100,44 @@ class AISegmentationThread(QThread):
         
         self.progress.emit("Finalizing segmentation...", 90)
         self.finished_segmentation.emit(labels, 'stardist_labels')
+
+    def run_sam(self):
+        self.progress.emit("Initializing SAM model...", 10)
+        try:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            model_type = "vit_b"
+            checkpoint_path = get_sam_checkpoint(model_type)
+
+            sam = sam_model_registry[model_type](checkpoint=checkpoint_path)
+            sam.to(device=device)
+
+            mask_generator = SamAutomaticMaskGenerator(sam)
+
+            self.progress.emit("Preparing image for SAM...", 30)
+            if self.image_data.ndim == 2:
+                image_rgb = np.stack((self.image_data,) * 3, axis=-1).astype(np.uint8)
+            elif self.image_data.shape[-1] == 3:
+                image_rgb = self.image_data.astype(np.uint8)
+            else: # Grayscale with channels
+                image_rgb = self.image_data[..., 0] 
+                image_rgb = np.stack((image_rgb,) * 3, axis=-1).astype(np.uint8)
+
+
+            self.progress.emit("Running SAM inference...", 50)
+            masks = mask_generator.generate(image_rgb)
+
+            self.progress.emit("Finalizing SAM segmentation...", 90)
+            if len(masks) > 0:
+                sorted_masks = sorted(masks, key=(lambda x: x['area']), reverse=True)
+                label_image = np.zeros(sorted_masks[0]['segmentation'].shape, dtype=np.uint32)
+                for i, mask in enumerate(sorted_masks):
+                    label_image[mask['segmentation']] = i + 1
+                self.finished_segmentation.emit(label_image, 'sam_labels')
+            else:
+                self.error_occurred.emit("SAM did not find any objects.")
+
+        except Exception as e:
+            self.error_occurred.emit(f"SAM model error: {str(e)}")
 
 
 class AISegmentationWidget(QWidget):
@@ -116,6 +183,13 @@ class AISegmentationWidget(QWidget):
         sd_layout.addWidget(self.run_stardist_btn)
         layout.addWidget(stardist_group)
 
+        sam_group = QGroupBox("Segment Anything (SAM)")
+        sam_layout = QVBoxLayout(sam_group)
+        self.run_sam_btn = QPushButton("Run SAM (Automatic Mask Generation)")
+        self.run_sam_btn.clicked.connect(self.run_sam)
+        sam_layout.addWidget(self.run_sam_btn)
+        layout.addWidget(sam_group)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.status_label = QLabel("")
@@ -127,8 +201,15 @@ class AISegmentationWidget(QWidget):
         self.setLayout(layout)
 
         if not AI_MODELS_AVAILABLE:
+            cellpose_group.setDisabled(True)
+            stardist_group.setDisabled(True)
+        
+        if not SAM_MODELS_AVAILABLE:
+            sam_group.setDisabled(True)
+
+        if not AI_MODELS_AVAILABLE and not SAM_MODELS_AVAILABLE:
             self.setDisabled(True)
-            self.status_label.setText("Install cellpose and stardist to enable.")
+            self.status_label.setText("Install cellpose, stardist, and segment-anything to enable.")
             self.status_label.setVisible(True)
 
     def run_cellpose(self):
@@ -141,8 +222,16 @@ class AISegmentationWidget(QWidget):
     def run_stardist(self):
         self.start_segmentation('stardist', {})
 
+    def run_sam(self):
+        self.start_segmentation('sam', {})
+
     def start_segmentation(self, model_name, params):
-        layer = self.viewer.layers[self.layer_combo.currentText()] if self.layer_combo.count() > 0 else None
+        if self.layer_combo.count() == 0:
+            self.status_label.setText("No image layer to select.")
+            self.status_label.setVisible(True)
+            return
+
+        layer = self.viewer.layers[self.layer_combo.currentText()]
         if not validate_image_layer(layer):
             self.status_label.setText("Please select a valid image layer.")
             self.status_label.setVisible(True)
@@ -173,5 +262,13 @@ class AISegmentationWidget(QWidget):
         self.set_buttons_enabled(True)
 
     def set_buttons_enabled(self, enabled):
-        self.run_cellpose_btn.setEnabled(enabled)
-        self.run_stardist_btn.setEnabled(enabled)
+        self.run_cellpose_btn.setEnabled(enabled and AI_MODELS_AVAILABLE)
+        self.run_stardist_btn.setEnabled(enabled and AI_MODELS_AVAILABLE)
+        self.run_sam_btn.setEnabled(enabled and SAM_MODELS_AVAILABLE)
+
+    def refresh_layers(self):
+        self.layer_combo.clear()
+        for layer in self.viewer.layers:
+            if isinstance(layer, napari.layers.Image):
+                self.layer_combo.addItem(layer.name)
+
