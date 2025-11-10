@@ -7,7 +7,7 @@ license: MIT
 
 contributions:
   readers:
-    - command: scientific-image-analyzer.get_reader
+    - command: file_io_napari:get_reader
       filename_patterns: 
         - '*.czi'
         - '*.lif'
@@ -21,7 +21,7 @@ contributions:
       accepts_directories: false
 
   writers:
-    - command: scientific-image-analyzer.get_writer
+    - command: file_io_napari:write_tiff
       layer_types: ['image']
       filename_extensions: ['.tif', '.tiff']
 
