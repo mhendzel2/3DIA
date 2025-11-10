@@ -9867,3 +9867,6 @@ dist/
 .venv/Lib/site-packages/PySide6/QtAsyncio/__pycache__/tasks.cpython-312.pyc
 src/__pycache__/main_napari.cpython-313.pyc
 src/utils/__pycache__/analysis_utils.cpython-313.pyc
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.github\instructions\snyk_rules.instructions.md
