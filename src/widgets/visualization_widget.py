@@ -98,7 +98,12 @@ class VisualizationWidget(QWidget):
     def get_selected_layer(self):
         """Get the currently selected napari layer."""
         layer_name = self.layer_combo.currentText()
-        return self.viewer.layers.get(layer_name, None)
+        if not layer_name:
+            return None
+        try:
+            return self.viewer.layers[layer_name]
+        except (KeyError, IndexError):
+            return None
 
     def on_layer_change(self):
         """Update the widget controls when the selected layer changes."""

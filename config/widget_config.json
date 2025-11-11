@@ -1,0 +1,38 @@
+{
+    "enabled_widgets": {
+        "file_io": true,
+        "processing": true,
+        "segmentation": true,
+        "analysis": true,
+        "visualization": true,
+        "deconvolution": false,
+        "statistics": true,
+        "filament_tracing": true,
+        "tracking": true,
+        "simple_threshold": false,
+        "adaptive_threshold": false,
+        "hca": true,
+        "ai_segmentation": false,
+        "biophysics": false,
+        "interactive_plotting": false
+    },
+    "widget_areas": {
+        "file_io": "left",
+        "processing": "left",
+        "segmentation": "left",
+        "analysis": "left",
+        "visualization": "left",
+        "deconvolution": "left",
+        "statistics": "right",
+        "filament_tracing": "right",
+        "tracking": "right",
+        "simple_threshold": "left",
+        "adaptive_threshold": "left",
+        "hca": "right",
+        "ai_segmentation": "right",
+        "biophysics": "right",
+        "interactive_plotting": "right"
+    },
+    "load_on_startup": true,
+    "show_welcome_message": true
+}
