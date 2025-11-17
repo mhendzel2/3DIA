@@ -48,5 +48,5 @@ ome-types>=0.6.2
 ome-zarr>=0.10.2
 console>=0.1.4
 
-# Development package
+# Development package (install from current directory)
 -e .

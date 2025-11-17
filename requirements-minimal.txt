@@ -20,5 +20,5 @@ numpy>=1.21.0
 scipy>=1.9.0
 scikit-image>=0.19.0
 
-# Development package
--e ./src
+# Development package (install from current directory)
+-e .
