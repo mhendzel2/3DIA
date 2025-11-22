@@ -9,10 +9,9 @@ The following tools were evaluated for potential integration:
 ### u-Segment3D (Nature Methods, 2025)
 *   **Concept**: Reconstructs 3D consensus segmentation from 2D segmented slices (orthogonal views) without 3D ground truth.
 *   **Relevance**: High. Many datasets are acquired as Z-stacks where 2D segmentation is easier or pre-existing.
-*   **Integration Status**:
-    *   **Implemented**: A native Python implementation of the **Indirect Method** ("Orthogonal Consensus") has been added to `AdvancedSegmentation`.
-    *   **Capability**: It accepts 2D segmentations from XY, XZ, and YZ views, fuses them via a voting mechanism, and separates objects using distance-transform-based watershed. This matches the core "consensus" logic of u-Segment3D without requiring heavy dependencies like `scikit-fmm`.
-    *   **Usage**: `advanced_analyzer.segmentation.consensus_orthogonal_views(xy, xz, yz)`.
+*   **Integration**:
+    *   *Current Action*: Implemented a `consensus_3d_segmentation` method in `AdvancedSegmentation` class. This mimics the core concept by taking a stack of 2D labels and using 3D morphological operations to create a continuous 3D volume.
+    *   *Future*: Integrate the official `DanuserLab/u-segment3D` Python package once it is available in the environment for more robust "voting" mechanisms across multiple orthogonal views.
 
 ### FAST: Real-time self-supervised denoiser (Nature Communications, 2025)
 *   **Concept**: High-speed (>1000 fps) self-supervised denoising for volumetric live imaging.
@@ -36,9 +35,7 @@ The following tools were evaluated for potential integration:
 
 ### Phase 1: Morphological & Structural Enhancements (Completed)
 *   **Morphological Descriptors**: Added `solidity`, `extent`, `feret_diameter_max`, `moments_hu`, `aspect_ratio`, and `roundness` to `analysis_utils.py`. This improves object discrimination capabilities.
-*   **3D Consensus**:
-    *   `consensus_3d_segmentation`: Bridge 2D slice segmentation to 3D volumes using morphological continuity.
-    *   `consensus_orthogonal_views`: Fuse predictions from orthogonal views (XY, XZ, YZ) to create a robust 3D consensus, implementing u-Segment3D's Indirect Method logic.
+*   **3D Consensus**: Implemented `consensus_3d_segmentation` in `src/advanced_analysis.py` to bridge 2D slice segmentation to 3D volumes.
 
 ### Phase 2: Advanced Integration (Future)
 *   **Deep Learning Integration**: Add optional dependencies for `torch` or `tensorflow` to enable loading pre-trained models (like FAST or Cellpose 3D) directly within the `AdvancedAnalyzer`.
@@ -54,19 +51,11 @@ When running `calculate_object_statistics` (via the Analysis Widget or API), the
 *   `moments_hu_0`...`moments_hu_6`: Invariant shape moments.
 
 ### 3D Consensus Segmentation
-1. **Single View (Stack) Continuity**:
-   ```python
-   from advanced_analysis import advanced_analyzer
-   # labels_2d: (Z, Y, X) stack of 2D segmentations
-   labels_3d = advanced_analyzer.segmentation.consensus_3d_segmentation(labels_2d)
-   ```
+Use `advanced_analyzer.segmentation.consensus_3d_segmentation(label_stack)`:
+```python
+from advanced_analysis import advanced_analyzer
+import numpy as np
 
-2. **Orthogonal View Consensus (u-Segment3D Indirect Method)**:
-   ```python
-   # labels_xy: (Z, Y, X)
-   # labels_xz: (Y, Z, X) -> will be transposed internally
-   # labels_yz: (X, Z, Y) -> will be transposed internally
-   labels_3d = advanced_analyzer.segmentation.consensus_orthogonal_views(
-       labels_xy, labels_xz, labels_yz, consensus_threshold=2
-   )
-   ```
+# Assume labels_2d is a (Z, Y, X) numpy array where each slice Z is independently segmented
+labels_3d = advanced_analyzer.segmentation.consensus_3d_segmentation(labels_2d)
+```

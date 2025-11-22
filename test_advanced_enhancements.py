@@ -200,42 +200,6 @@ def test_consensus_3d_segmentation():
             print("✓ Noise removed successfully")
 
         print("✓ Consensus logic verified.")
-
-        # Test Orthogonal Consensus
-        print("Testing Orthogonal Consensus...")
-        shape = (10, 20, 20) # Z, Y, X
-
-        # Create a cube in center
-        cube_xy = np.zeros(shape, dtype=int)
-        cube_xy[3:7, 5:15, 5:15] = 1 # Z=3..6
-
-        # XZ view stack (Y, Z, X) - Create matching cube
-        cube_xz = np.zeros((20, 10, 20), dtype=int)
-        cube_xz[5:15, 3:7, 5:15] = 1
-
-        # YZ view stack (X, Z, Y) - Create matching cube
-        cube_yz = np.zeros((20, 10, 20), dtype=int)
-        cube_yz[5:15, 3:7, 5:15] = 1
-
-        # Consensus 3D
-        cons_3d = advanced_analyzer.segmentation.consensus_orthogonal_views(
-            cube_xy, cube_xz, cube_yz, consensus_threshold=2
-        )
-
-        # Check center
-        if cons_3d[5, 10, 10] == 1:
-            print("✓ Orthogonal Consensus: Center correctly identified")
-        else:
-            print("✗ Orthogonal Consensus: Center missed")
-            return False
-
-        # Check background
-        if cons_3d[0, 0, 0] == 0:
-            print("✓ Orthogonal Consensus: Background correctly identified")
-        else:
-            print("✗ Orthogonal Consensus: Background is not zero")
-            return False
-
         return True
     except Exception as e:
         print(f"✗ Consensus 3D segmentation test failed: {e}")
