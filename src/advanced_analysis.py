@@ -225,6 +225,89 @@ class AdvancedSegmentation:
             print(f"Consensus 3D segmentation error: {e}")
             return label_stack
 
+    @staticmethod
+    def consensus_orthogonal_views(labels_xy: np.ndarray,
+                                 labels_xz: Optional[np.ndarray] = None,
+                                 labels_yz: Optional[np.ndarray] = None,
+                                 consensus_threshold: int = 1) -> np.ndarray:
+        """
+        Implements the 'Indirect Method' of u-Segment3D: merging 2D orthogonal views.
+
+        Args:
+            labels_xy: Z, Y, X stack (standard)
+            labels_xz: Y, Z, X stack (optional)
+            labels_yz: X, Z, Y stack (optional)
+            consensus_threshold: Minimum number of views agreeing for a voxel to be foreground.
+
+        Returns:
+            3D Label volume (Z, Y, X)
+        """
+        try:
+            if labels_xy.ndim != 3:
+                 raise ValueError("Input must be 3D volumes")
+
+            from scipy import ndimage
+
+            shape = labels_xy.shape # Z, Y, X
+
+            # Initialize voting volume
+            votes = (labels_xy > 0).astype(int)
+
+            # Add XZ view votes (Y, Z, X) -> (Z, Y, X)
+            # XZ view usually means Z is vertical in the image, X is horizontal?
+            # Standard convention: Image(Y, X).
+            # If 'XZ view', dimensions are (Z, X) for each Y slice?
+            # Let's assume input `labels_xz` is a stack where 'Y' is the stack dimension.
+            # So labels_xz shape is (Y, Z, X).
+            # We need to transpose it to (Z, Y, X).
+            if labels_xz is not None:
+                if labels_xz.shape != (shape[1], shape[0], shape[2]):
+                    print(f"Warning: labels_xz shape {labels_xz.shape} mismatch with expected transposed shape {(shape[1], shape[0], shape[2])}")
+                else:
+                    # Transpose (Y, Z, X) -> (Z, Y, X) i.e. (1, 0, 2)
+                    votes += (labels_xz.transpose(1, 0, 2) > 0).astype(int)
+
+            # Add YZ view votes (X, Z, Y) -> (Z, Y, X)
+            # Input labels_yz shape (X, Z, Y)
+            if labels_yz is not None:
+                if labels_yz.shape != (shape[2], shape[0], shape[1]):
+                    print(f"Warning: labels_yz shape {labels_yz.shape} mismatch")
+                else:
+                    # Transpose (X, Z, Y) -> (Z, Y, X) i.e. (1, 2, 0)
+                    votes += (labels_yz.transpose(1, 2, 0) > 0).astype(int)
+
+            # Apply consensus
+            consensus_mask = votes >= consensus_threshold
+
+            # If using distance transform to separate objects (simple 'Indirect' implementation)
+            if np.sum(consensus_mask) > 0:
+                # Euclidean Distance Transform on the consensus mask
+                distance = ndimage.distance_transform_edt(consensus_mask)
+
+                # Find peaks to use as seeds for watershed
+                # This separates connected objects similar to how u-Segment3D uses heat diffusion from centroids
+                from skimage.feature import peak_local_max
+                from skimage.segmentation import watershed
+
+                # indices argument was removed in recent skimage versions (returns coords by default)
+                local_maxi_coords = peak_local_max(distance, footprint=np.ones((3, 3, 3)), labels=consensus_mask)
+
+                # Create a boolean mask from coordinates for labeling
+                local_maxi = np.zeros_like(distance, dtype=bool)
+                local_maxi[tuple(local_maxi_coords.T)] = True
+
+                markers = ndimage.label(local_maxi)[0]
+
+                # Watershed
+                labels_3d = watershed(-distance, markers, mask=consensus_mask)
+                return labels_3d
+            else:
+                return np.zeros(shape, dtype=int)
+
+        except Exception as e:
+            print(f"Orthogonal consensus error: {e}")
+            return labels_xy
+
 class AIDenoising:
     """AI-inspired denoising algorithms"""
     
