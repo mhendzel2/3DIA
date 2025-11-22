@@ -187,6 +187,44 @@ class AdvancedSegmentation:
             threshold = np.mean(image)
             return (image > threshold).astype(int)
 
+    @staticmethod
+    def consensus_3d_segmentation(label_stack: np.ndarray,
+                                filter_size: int = 3,
+                                min_object_size: int = 10) -> np.ndarray:
+        """
+        Reconstructs 3D objects from a stack of 2D segmentations.
+        Inspired by u-Segment3D concepts of consensus and continuity.
+        """
+        try:
+            if label_stack.ndim != 3:
+                print("Error: Consensus segmentation requires 3D input (Z, Y, X)")
+                return label_stack
+
+            from scipy import ndimage
+
+            # 1. Morphological Closing in 3D to connect gaps between slices
+            # This mimics 'consensus' by assuming objects are continuous in Z
+            structuring_element = np.ones((filter_size, filter_size, filter_size))
+            closed_volume = ndimage.binary_closing(label_stack > 0, structure=structuring_element)
+
+            # 2. Label the 3D connected components
+            labeled_volume, num_features = ndimage.label(closed_volume)
+
+            # 3. Remove small disconnected artifacts
+            sizes = ndimage.sum(closed_volume, labeled_volume, range(num_features + 1))
+            mask_size = sizes < min_object_size
+            remove_pixel = mask_size[labeled_volume]
+            labeled_volume[remove_pixel] = 0
+
+            # Relabel to ensure contiguous IDs
+            final_labels, _ = ndimage.label(labeled_volume > 0)
+
+            return final_labels
+
+        except Exception as e:
+            print(f"Consensus 3D segmentation error: {e}")
+            return label_stack
+
 class AIDenoising:
     """AI-inspired denoising algorithms"""
     
