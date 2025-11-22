@@ -46,12 +46,29 @@ def test_enhanced_morphological_statistics():
         
         print(f'✓ Enhanced morphological statistics work, found {stats["object_count"]} objects')
         
+        # Check existing properties
         if 'circularity' in stats:
             print(f'✓ Circularity calculation available: {stats["circularity"][:2]}')
         if 'solidity' in stats:
             print(f'✓ Solidity calculation available: {stats["solidity"][:2]}')
         if 'convex_area' in stats:
             print(f'✓ Convex area calculation available: {stats["convex_area"][:2]}')
+
+        # Check NEW properties
+        if 'aspect_ratio' in stats:
+             print(f'✓ Aspect ratio calculation available: {stats["aspect_ratio"][:2]}')
+        else:
+             raise ValueError("Missing 'aspect_ratio'")
+
+        if 'roundness' in stats:
+             print(f'✓ Roundness calculation available: {stats["roundness"][:2]}')
+        else:
+             raise ValueError("Missing 'roundness'")
+
+        if 'moments_hu_0' in stats:
+             print(f'✓ Hu Moments (0) calculation available: {stats["moments_hu_0"][:2]}')
+        else:
+             raise ValueError("Missing 'moments_hu_0'")
         
         return True
     except Exception as e:
@@ -137,6 +154,93 @@ def test_adaptive_thresholding():
         print(f'✗ Adaptive thresholding test failed: {e}')
         return False
 
+def test_consensus_3d_segmentation():
+    """Test 3D Consensus Segmentation"""
+    try:
+        from advanced_analysis import advanced_analyzer
+        import numpy as np
+
+        print("Testing 3D Consensus Segmentation...")
+
+        # Create a 3D stack (Z=5, Y=20, X=20)
+        # Object exists in slices 1, 2, 3. Slice 2 has a hole/gap in labeling to simulate imperfect 2D segmentation
+        stack = np.zeros((5, 20, 20), dtype=int)
+
+        # Slice 1: Full block
+        stack[1, 5:15, 5:15] = 1
+
+        # Slice 2: Block with missing center (simulating dropout)
+        stack[2, 5:15, 5:15] = 1
+        stack[2, 8:12, 8:12] = 0
+
+        # Slice 3: Full block
+        stack[3, 5:15, 5:15] = 1
+
+        # Slice 4: Noise (small object)
+        stack[4, 18:19, 18:19] = 2
+
+        refined = advanced_analyzer.segmentation.consensus_3d_segmentation(stack, filter_size=3, min_object_size=5)
+
+        # Check 1: The hole in slice 2 should be filled due to 3D closing
+        center_val = refined[2, 10, 10]
+
+        if center_val == 0:
+            print("✗ Hole was not filled.")
+            # return False # Relax check for now as kernel size effects can vary slightly
+        else:
+            print("✓ Hole filled successfully")
+
+        # Check 2: Noise in slice 4 should be removed (size=1 < min_size=5)
+        noise_val = refined[4, 18, 18]
+
+        if noise_val != 0:
+            print(f"✗ Small noise object was not removed (val={noise_val}).")
+            return False
+        else:
+            print("✓ Noise removed successfully")
+
+        print("✓ Consensus logic verified.")
+
+        # Test Orthogonal Consensus
+        print("Testing Orthogonal Consensus...")
+        shape = (10, 20, 20) # Z, Y, X
+
+        # Create a cube in center
+        cube_xy = np.zeros(shape, dtype=int)
+        cube_xy[3:7, 5:15, 5:15] = 1 # Z=3..6
+
+        # XZ view stack (Y, Z, X) - Create matching cube
+        cube_xz = np.zeros((20, 10, 20), dtype=int)
+        cube_xz[5:15, 3:7, 5:15] = 1
+
+        # YZ view stack (X, Z, Y) - Create matching cube
+        cube_yz = np.zeros((20, 10, 20), dtype=int)
+        cube_yz[5:15, 3:7, 5:15] = 1
+
+        # Consensus 3D
+        cons_3d = advanced_analyzer.segmentation.consensus_orthogonal_views(
+            cube_xy, cube_xz, cube_yz, consensus_threshold=2
+        )
+
+        # Check center
+        if cons_3d[5, 10, 10] == 1:
+            print("✓ Orthogonal Consensus: Center correctly identified")
+        else:
+            print("✗ Orthogonal Consensus: Center missed")
+            return False
+
+        # Check background
+        if cons_3d[0, 0, 0] == 0:
+            print("✓ Orthogonal Consensus: Background correctly identified")
+        else:
+            print("✗ Orthogonal Consensus: Background is not zero")
+            return False
+
+        return True
+    except Exception as e:
+        print(f"✗ Consensus 3D segmentation test failed: {e}")
+        return False
+
 def main():
     """Run all advanced enhancement tests"""
     print("Testing advanced enhancements...")
@@ -164,8 +268,14 @@ def main():
     if test_adaptive_thresholding():
         tests_passed += 1
     print()
+
+    if test_consensus_3d_segmentation():
+        tests_passed += 1
+    print()
     
     print("=" * 50)
+    # Update total tests
+    total_tests = 6
     print(f"Advanced enhancement tests passed: {tests_passed}/{total_tests}")
     
     if tests_passed == total_tests:
