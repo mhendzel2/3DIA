@@ -7,7 +7,10 @@ import os
 import io
 import base64
 import json
+import time
 from pathlib import Path
+from collections import OrderedDict
+from threading import Lock
 
 # Flask with fallback
 try:
@@ -37,6 +40,125 @@ from utils import analysis_utils as au
 import numpy as np
 from scipy import ndimage as ndi
 
+
+class LRUCache:
+    """
+    Thread-safe LRU cache for session data with memory limits.
+    Automatically evicts oldest entries when limits are exceeded.
+    """
+    def __init__(self, max_entries=50, max_memory_mb=500):
+        """
+        Initialize LRU cache.
+        
+        Args:
+            max_entries: Maximum number of cache entries
+            max_memory_mb: Maximum estimated memory usage in MB
+        """
+        self._cache = OrderedDict()
+        self._lock = Lock()
+        self._max_entries = max_entries
+        self._max_memory_bytes = max_memory_mb * 1024 * 1024
+        self._access_times = {}
+    
+    def _estimate_size(self, value):
+        """Estimate memory size of a cache value in bytes"""
+        size = 0
+        if isinstance(value, dict):
+            for k, v in value.items():
+                size += self._estimate_size(v)
+        elif isinstance(value, np.ndarray):
+            size += value.nbytes
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                size += self._estimate_size(item)
+        elif isinstance(value, str):
+            size += len(value)
+        else:
+            size += 100  # Default estimate for other types
+        return size
+    
+    def _get_total_memory(self):
+        """Get total estimated memory usage"""
+        total = 0
+        for value in self._cache.values():
+            total += self._estimate_size(value)
+        return total
+    
+    def _evict_if_needed(self):
+        """Evict oldest entries if limits exceeded"""
+        # Evict by entry count
+        while len(self._cache) > self._max_entries:
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
+            if oldest_key in self._access_times:
+                del self._access_times[oldest_key]
+            print(f"Cache evicted session (max entries): {oldest_key}")
+        
+        # Evict by memory (check periodically)
+        while self._get_total_memory() > self._max_memory_bytes and len(self._cache) > 0:
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
+            if oldest_key in self._access_times:
+                del self._access_times[oldest_key]
+            print(f"Cache evicted session (memory limit): {oldest_key}")
+    
+    def get(self, key, default=None):
+        """Get value and update access time"""
+        with self._lock:
+            if key in self._cache:
+                # Move to end (most recently used)
+                self._cache.move_to_end(key)
+                self._access_times[key] = time.time()
+                return self._cache[key]
+            return default
+    
+    def set(self, key, value):
+        """Set value and evict if needed"""
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+            self._cache[key] = value
+            self._access_times[key] = time.time()
+            self._evict_if_needed()
+    
+    def delete(self, key):
+        """Delete a specific entry"""
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+            if key in self._access_times:
+                del self._access_times[key]
+    
+    def __contains__(self, key):
+        with self._lock:
+            return key in self._cache
+    
+    def __getitem__(self, key):
+        result = self.get(key)
+        if result is None and key not in self._cache:
+            raise KeyError(key)
+        return result
+    
+    def __setitem__(self, key, value):
+        self.set(key, value)
+    
+    def clear(self):
+        """Clear all cache entries"""
+        with self._lock:
+            self._cache.clear()
+            self._access_times.clear()
+    
+    def get_stats(self):
+        """Get cache statistics"""
+        with self._lock:
+            return {
+                'entries': len(self._cache),
+                'max_entries': self._max_entries,
+                'estimated_memory_mb': self._get_total_memory() / (1024 * 1024),
+                'max_memory_mb': self._max_memory_bytes / (1024 * 1024)
+            }
+
+
 # Web application (if Flask is available)
 if HAS_FLASK:
     app = Flask(__name__)
@@ -46,8 +168,8 @@ if HAS_FLASK:
     # Create uploads directory
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
-    # Global storage
-    analysis_cache = {}
+    # Global storage with LRU cache for memory management
+    analysis_cache = LRUCache(max_entries=50, max_memory_mb=500)
     
     if HAS_BATCH_PROCESSOR:
         batch_processor = BatchProcessor()
@@ -124,7 +246,11 @@ if HAS_FLASK:
             return jsonify({'error': 'Invalid session'}), 400
         
         try:
-            image = analysis_cache[session_id]['original_image']
+            session_data = analysis_cache.get(session_id)
+            if session_data is None:
+                return jsonify({'error': 'Session data not found'}), 400
+            
+            image = session_data['original_image']
             
             if method == 'cellpose':
                 labels = au.segment_cellpose(image)
@@ -139,12 +265,26 @@ if HAS_FLASK:
                 return jsonify({'error': f'{method} segmentation failed. Check server logs.'}), 500
             
             # Store results
-            analysis_cache[session_id]['processed_images'][f'labels_{method}'] = labels
+            session_data['processed_images'][f'labels_{method}'] = labels
             
-            # Generate measurements
-            measurements_df = au.calculate_object_statistics(labels, image)
-            measurements = measurements_df.to_dict('records')
-            analysis_cache[session_id]['results'][f'measurements_{method}'] = measurements
+            # Generate measurements (returns a dict, not DataFrame)
+            measurements_dict = au.calculate_object_statistics(labels, image)
+            
+            # Convert dict of lists to list of dicts for JSON serialization
+            if 'label' in measurements_dict:
+                num_objects = len(measurements_dict.get('label', []))
+                measurements = []
+                for i in range(num_objects):
+                    obj_data = {}
+                    for key, values in measurements_dict.items():
+                        if isinstance(values, list) and len(values) > i:
+                            obj_data[key] = values[i]
+                    measurements.append(obj_data)
+            else:
+                measurements = [measurements_dict]
+            
+            session_data['results'][f'measurements_{method}'] = measurements
+            analysis_cache.set(session_id, session_data)  # Update cache
             
             # Create visualization
             overlay_pil = au.create_label_overlay(image, labels)
@@ -179,7 +319,11 @@ if HAS_FLASK:
             return jsonify({'error': 'Invalid session'}), 400
         
         try:
-            image = analysis_cache[session_id]['original_image']
+            session_data = analysis_cache.get(session_id)
+            if session_data is None:
+                return jsonify({'error': 'Session data not found'}), 400
+            
+            image = session_data['original_image']
             
             if analysis_type == 'intensity':
                 results = au.calculate_intensity_statistics(image)
@@ -190,7 +334,8 @@ if HAS_FLASK:
             else:
                 results = {'error': 'Unknown analysis type'}
             
-            analysis_cache[session_id]['results'][f'analysis_{analysis_type}'] = results
+            session_data['results'][f'analysis_{analysis_type}'] = results
+            analysis_cache.set(session_id, session_data)  # Update cache
             
             return jsonify({
                 'success': True,
@@ -202,8 +347,44 @@ if HAS_FLASK:
 
     @app.route('/track', methods=['POST'])
     def track_objects():
-        """Perform tracking on a real timelapse sequence"""
-        return jsonify({'error': 'Tracking not implemented in this version.'}), 501
+        """
+        Object tracking endpoint.
+        
+        Currently not implemented. Object tracking requires:
+        - Time-series data (multiple frames)
+        - A tracking library like btrack, trackpy, or similar
+        
+        Returns HTTP 501 (Not Implemented) with information about the limitation.
+        """
+        return jsonify({
+            'error': 'Object tracking is not implemented in this version.',
+            'info': 'Tracking requires time-series data and additional dependencies (e.g., btrack).',
+            'suggestion': 'For tracking functionality, consider using napari with the btrack plugin directly.'
+        }), 501
+
+    @app.route('/api/cache/stats', methods=['GET'])
+    def get_cache_stats():
+        """Get cache statistics for monitoring"""
+        try:
+            stats = analysis_cache.get_stats()
+            return jsonify({
+                'success': True,
+                'cache_stats': stats
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/cache/clear', methods=['POST'])
+    def clear_cache():
+        """Clear all cached session data"""
+        try:
+            analysis_cache.clear()
+            return jsonify({
+                'success': True,
+                'message': 'Cache cleared successfully'
+            })
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
     @app.route('/create_test', methods=['POST'])
     def create_test_image_route(): # Renamed to avoid conflict

@@ -31,10 +31,21 @@ class SegmentationThread(QThread):
         self.operation = operation
         self.data = data
         self.parameters = parameters
+        self._cancelled = False
+    
+    def cancel(self):
+        """Request cancellation of the running operation"""
+        self._cancelled = True
+    
+    def is_cancelled(self):
+        """Check if cancellation was requested"""
+        return self._cancelled
         
     def run(self):
         """Execute segmentation operation"""
         try:
+            if self.is_cancelled():
+                return
             if self.operation == "spots":
                 self.detect_spots()
             elif self.operation == "surface":
@@ -48,6 +59,8 @@ class SegmentationThread(QThread):
             
     def detect_spots(self):
         """Detect spots using blob detection"""
+        if self.is_cancelled():
+            return
         params = self.parameters
         method = params.get('method', 'log')
         
@@ -133,42 +146,74 @@ class SegmentationThread(QThread):
             self.error_occurred.emit(f"Surface creation failed: {str(e)}")
             
     def watershed_segmentation(self):
-        """Perform watershed segmentation"""
+        """Perform watershed segmentation with improved marker detection"""
         params = self.parameters
         
         self.progress.emit(20)
         
-        # Create markers
+        # Get parameters with defaults
+        threshold = params.get('threshold', 0)
+        min_distance = params.get('min_distance', 10)  # New parameter for peak separation
+        sigma = params.get('smoothing_sigma', 1.0)  # Optional smoothing
+        
+        # Create binary mask
+        binary_mask = self.data > threshold
+        
+        # Compute distance transform
+        distance = ndimage.distance_transform_edt(binary_mask)
+        
+        # Optional smoothing of distance map to reduce spurious peaks
+        if sigma > 0:
+            distance = ndimage.gaussian_filter(distance, sigma=sigma)
+        
+        self.progress.emit(30)
+        
+        # Create markers using improved method
         if params.get('auto_markers', True):
-            # Automatic marker detection
-            distance = ndimage.distance_transform_edt(self.data > params['threshold'])
-            coords = blob_log(distance, min_sigma=1, max_sigma=10, num_sigma=10, threshold=0.1)
+            # Use peak_local_max instead of blob_log for more reliable marker detection
+            # This is more robust for densely packed objects
+            from skimage.feature import peak_local_max
+            
+            # Find local maxima in the distance transform
+            coords = peak_local_max(
+                distance,
+                min_distance=min_distance,
+                threshold_abs=params.get('peak_threshold', 1.0),  # Minimum peak height
+                exclude_border=params.get('exclude_border', False),
+                labels=binary_mask.astype(int) if params.get('use_mask_for_peaks', True) else None
+            )
+            
+            # Create marker image
             markers = np.zeros_like(self.data, dtype=int)
             for i, coord in enumerate(coords):
                 if self.data.ndim == 2:
-                    markers[int(coord[0]), int(coord[1])] = i + 1
-                else:
-                    markers[int(coord[0]), int(coord[1]), int(coord[2])] = i + 1
+                    markers[coord[0], coord[1]] = i + 1
+                elif self.data.ndim == 3:
+                    markers[coord[0], coord[1], coord[2]] = i + 1
         else:
-            # Use intensity peaks as markers
+            # Use intensity peaks as markers with morphological reconstruction
             markers = morphology.local_maxima(self.data)
             markers = measure.label(markers)
             
         self.progress.emit(50)
         
-        # Apply watershed
+        # Apply watershed on inverted distance transform
         labels = segmentation.watershed(
-            -self.data, 
+            -distance,  # Watershed on inverted distance (finds valleys = object boundaries)
             markers, 
-            mask=self.data > params['threshold']
+            mask=binary_mask
         )
         
         self.progress.emit(90)
         
+        num_objects = len(np.unique(labels)) - 1  # Exclude background (0)
+        
         metadata = {
-            'num_objects': len(np.unique(labels)) - 1,  # Exclude background
-            'threshold': params['threshold'],
-            'auto_markers': params.get('auto_markers', True)
+            'num_objects': num_objects,
+            'threshold': threshold,
+            'min_distance': min_distance,
+            'auto_markers': params.get('auto_markers', True),
+            'smoothing_sigma': sigma
         }
         
         self.progress.emit(100)

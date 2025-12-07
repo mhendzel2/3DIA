@@ -13,11 +13,28 @@ from typing import List, Dict, Any, Optional
 import concurrent.futures
 import threading
 
-# Import analysis modules
-from scientific_analyzer import (
-    GradientWatershedSegmentation, StarDistSegmentation, RegionPropsAnalysis,
-    BTrackTracking, ColocalizationAnalysis, ImageProcessor
-)
+# Import analysis utilities directly instead of nonexistent classes
+try:
+    from utils import analysis_utils as au
+    HAS_ANALYSIS_UTILS = True
+except ImportError:
+    HAS_ANALYSIS_UTILS = False
+    print("Warning: analysis_utils not available")
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
+    np = None
+
+try:
+    from scipy import ndimage
+    from skimage import filters
+    HAS_SCIPY_SKIMAGE = True
+except ImportError:
+    HAS_SCIPY_SKIMAGE = False
+    print("Warning: scipy/skimage not available - using fallback implementations")
 
 try:
     import sys
@@ -152,13 +169,30 @@ class BatchProcessor:
                 'workflow_steps': []
             }
             
-            # Load image
+            # Load image using analysis_utils
             try:
-                image_data = ImageProcessor.load_image(file_path)
+                if HAS_ANALYSIS_UTILS:
+                    image_data = au.load_image(file_path)
+                else:
+                    # Fallback: try PIL directly
+                    try:
+                        from PIL import Image
+                        with Image.open(file_path) as img:
+                            image_data = list(list(row) for row in img.convert('L').getdata())
+                            # Reshape to 2D
+                            w, h = img.size
+                            image_data = [image_data[i*w:(i+1)*w] for i in range(h)]
+                    except Exception:
+                        image_data = None
+                        
                 if image_data is None:
                     return {'error': f'Failed to load image: {file_path}'}
                 
-                result['image_shape'] = [len(image_data), len(image_data[0]) if image_data else 0]
+                # Get image shape properly for numpy arrays or lists
+                if HAS_NUMPY and isinstance(image_data, np.ndarray):
+                    result['image_shape'] = list(image_data.shape)
+                else:
+                    result['image_shape'] = [len(image_data), len(image_data[0]) if image_data else 0]
                 result['workflow_steps'].append('image_loaded')
                 
             except Exception as e:
@@ -186,35 +220,42 @@ class BatchProcessor:
             if workflow_config.get('segmentation', {}).get('enabled', False):
                 seg_config = workflow_config['segmentation']
                 method = seg_config.get('method', 'cellpose')
+                labels = None
                 
-                if method == 'cellpose':
+                if method == 'cellpose' and HAS_ANALYSIS_UTILS:
                     diameter = seg_config.get('diameter', 30)
-                    labels = GradientWatershedSegmentation.segment_cells(current_image, diameter)
-                elif method == 'stardist':
-                    labels = StarDistSegmentation.segment_nuclei(current_image)
+                    labels = au.segment_cellpose(current_image, diameter=diameter)
+                elif method == 'stardist' and HAS_ANALYSIS_UTILS:
+                    labels = au.segment_stardist(current_image)
+                elif method == 'watershed' and HAS_ANALYSIS_UTILS:
+                    labels = au.segment_watershed(current_image)
                 elif method == 'fibsem_comprehensive' and FIBSEM_AVAILABLE:
                     analyzer = FIBSEMAnalyzer()
                     analysis_results = analyzer.run_comprehensive_analysis(current_image, 'segmentation')
-                    labels = analysis_results.get('results', {}).get('mitochondria_mask', [])
-                else:
-                    # Simple threshold segmentation
-                    threshold = sum(sum(row) for row in current_image) / (len(current_image) * len(current_image[0]))
-                    labels = [[1 if pixel > threshold else 0 for pixel in row] for row in current_image]
+                    labels = analysis_results.get('results', {}).get('mitochondria_mask', None)
+                
+                # Fallback: threshold segmentation with Otsu's method
+                if labels is None:
+                    labels = self._threshold_segmentation(current_image)
                 
                 layers['labels'] = labels
                 result['workflow_steps'].append(f'{method}_segmentation')
                 
-                # Count objects
-                if labels:
-                    object_count = max(max(row) for row in labels) if any(any(row) for row in labels) else 0
-                    result['object_count'] = object_count
+                # Count objects correctly using unique labels
+                if labels is not None:
+                    result['object_count'] = self._count_objects(labels)
             
             # Analysis steps
             if workflow_config.get('analysis', {}).get('enabled', False):
                 analysis_config = workflow_config['analysis']
                 
                 if 'labels' in layers and analysis_config.get('measure_objects', False):
-                    measurements = RegionPropsAnalysis.analyze_objects(layers['labels'], current_image)
+                    # Use analysis_utils for object measurements
+                    if HAS_ANALYSIS_UTILS:
+                        measurements = au.calculate_object_statistics(layers['labels'], current_image)
+                    else:
+                        # Basic fallback measurement
+                        measurements = self._basic_measurements(layers['labels'], current_image)
                     result['measurements'] = measurements
                     result['workflow_steps'].append('object_analysis')
                 
@@ -245,15 +286,153 @@ class BatchProcessor:
                 'processing_time': time.time() - start_time if 'start_time' in locals() else 0
             }
     
-    def _apply_gaussian_filter(self, image, sigma):
-        """Apply Gaussian filter with fallback implementation"""
+    def _count_objects(self, labels) -> int:
+        """
+        Count objects correctly using unique labels.
+        Handles both numpy arrays and nested lists.
+        """
         try:
+            if HAS_NUMPY and isinstance(labels, np.ndarray):
+                # Use numpy's unique - exclude background (0)
+                unique_labels = np.unique(labels)
+                return int(len(unique_labels[unique_labels > 0]))
+            else:
+                # Pure Python for nested lists
+                unique_labels = set()
+                for row in labels:
+                    for val in row:
+                        if val > 0:
+                            unique_labels.add(val)
+                return len(unique_labels)
+        except Exception:
+            return 0
+    
+    def _threshold_segmentation(self, image):
+        """
+        Apply threshold segmentation using Otsu's method when available,
+        otherwise use an improved adaptive threshold.
+        """
+        try:
+            if HAS_NUMPY and isinstance(image, np.ndarray):
+                if HAS_SCIPY_SKIMAGE:
+                    # Use Otsu's threshold from skimage
+                    threshold = filters.threshold_otsu(image)
+                    binary = image > threshold
+                    # Label connected components
+                    from scipy import ndimage as ndi
+                    labels, _ = ndi.label(binary)
+                    return labels
+                else:
+                    # Improved threshold using histogram analysis
+                    flat = image.flatten()
+                    threshold = np.median(flat) + 0.5 * np.std(flat)
+                    binary = image > threshold
+                    # Simple labeling
+                    return (binary > 0).astype(int)
+            else:
+                # Pure Python fallback with histogram-based threshold
+                flat = [pixel for row in image for pixel in row]
+                flat_sorted = sorted(flat)
+                # Use median as threshold (more robust than mean)
+                threshold = flat_sorted[len(flat_sorted) // 2]
+                # Add half standard deviation for better separation
+                mean_val = sum(flat) / len(flat)
+                variance = sum((x - mean_val) ** 2 for x in flat) / len(flat)
+                std_val = variance ** 0.5
+                threshold = threshold + 0.5 * std_val
+                
+                height = len(image)
+                width = len(image[0]) if height > 0 else 0
+                return [[1 if pixel > threshold else 0 for pixel in row] for row in image]
+        except Exception:
+            # Ultimate fallback: simple mean threshold
+            if HAS_NUMPY and isinstance(image, np.ndarray):
+                threshold = np.mean(image)
+                return (image > threshold).astype(int)
+            else:
+                flat = [pixel for row in image for pixel in row]
+                threshold = sum(flat) / len(flat) if flat else 0
+                return [[1 if pixel > threshold else 0 for pixel in row] for row in image]
+    
+    def _basic_measurements(self, labels, intensity_image=None) -> Dict[str, Any]:
+        """Basic fallback measurements when analysis_utils is not available"""
+        measurements = {'label': [], 'area': [], 'mean_intensity': []}
+        
+        try:
+            if HAS_NUMPY and isinstance(labels, np.ndarray):
+                unique_labels = np.unique(labels)
+                unique_labels = unique_labels[unique_labels > 0]
+                
+                for label_id in unique_labels:
+                    mask = labels == label_id
+                    area = int(np.sum(mask))
+                    measurements['label'].append(int(label_id))
+                    measurements['area'].append(area)
+                    
+                    if intensity_image is not None and isinstance(intensity_image, np.ndarray):
+                        mean_int = float(np.mean(intensity_image[mask]))
+                        measurements['mean_intensity'].append(mean_int)
+                    else:
+                        measurements['mean_intensity'].append(0.0)
+            else:
+                # Pure Python fallback
+                label_areas = {}
+                label_intensities = {}
+                
+                for r, row in enumerate(labels):
+                    for c, label_val in enumerate(row):
+                        if label_val > 0:
+                            if label_val not in label_areas:
+                                label_areas[label_val] = 0
+                                label_intensities[label_val] = []
+                            label_areas[label_val] += 1
+                            if intensity_image:
+                                label_intensities[label_val].append(intensity_image[r][c])
+                
+                for label_id in sorted(label_areas.keys()):
+                    measurements['label'].append(label_id)
+                    measurements['area'].append(label_areas[label_id])
+                    if label_intensities.get(label_id):
+                        mean_int = sum(label_intensities[label_id]) / len(label_intensities[label_id])
+                        measurements['mean_intensity'].append(mean_int)
+                    else:
+                        measurements['mean_intensity'].append(0.0)
+            
+            measurements['object_count'] = len(measurements['label'])
+        except Exception as e:
+            measurements['error'] = str(e)
+            measurements['object_count'] = 0
+        
+        return measurements
+    
+    def _apply_gaussian_filter(self, image, sigma):
+        """Apply Gaussian filter with scipy when available, otherwise improved fallback"""
+        try:
+            # Prefer scipy's gaussian_filter
+            if HAS_SCIPY_SKIMAGE and HAS_NUMPY:
+                if not isinstance(image, np.ndarray):
+                    image = np.array(image)
+                return ndimage.gaussian_filter(image, sigma=sigma)
+            
+            # Fallback: separable approximation for better quality
+            if HAS_NUMPY and isinstance(image, np.ndarray):
+                # Create 1D Gaussian kernel
+                kernel_size = int(6 * sigma + 1) | 1  # Ensure odd
+                x = np.arange(kernel_size) - kernel_size // 2
+                kernel = np.exp(-x**2 / (2 * sigma**2))
+                kernel = kernel / kernel.sum()
+                
+                # Apply separable convolution (horizontal then vertical)
+                filtered = np.apply_along_axis(lambda m: np.convolve(m, kernel, mode='same'), 0, image)
+                filtered = np.apply_along_axis(lambda m: np.convolve(m, kernel, mode='same'), 1, filtered)
+                return filtered
+            
+            # Pure Python fallback: box filter approximation
             height = len(image)
             width = len(image[0]) if height > 0 else 0
             
-            # Simple averaging filter as fallback
             filtered = [[0 for _ in range(width)] for _ in range(height)]
-            kernel_size = int(sigma * 3)
+            kernel_size = max(1, int(sigma * 3))
             
             for i in range(height):
                 for j in range(width):
@@ -270,7 +449,7 @@ class BatchProcessor:
                     filtered[i][j] = int(sum_val / count) if count > 0 else image[i][j]
             
             return filtered
-        except:
+        except Exception:
             return image
     
     def _apply_denoising(self, image, method):
@@ -285,7 +464,7 @@ class BatchProcessor:
                     return GPU_ImageProcessor.accelerated_gaussian_filter(image, sigma=2.0)
             
             return image
-        except:
+        except Exception:
             return image
     
     def _handle_export(self, file_path: str, layers: Dict, result: Dict, export_config: Dict, batch_id: str) -> Dict[str, Any]:
