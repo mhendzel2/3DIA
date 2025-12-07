@@ -140,7 +140,7 @@ def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, pr
             properties = [
                 'label', 'area', 'centroid', 'bbox', 'perimeter', 'convex_area',
                 'major_axis_length', 'minor_axis_length', 'eccentricity',
-                'orientation', 'solidity', 'extent', 'feret_diameter_max'
+                'orientation', 'solidity', 'extent', 'feret_diameter_max', 'moments_hu'
             ]
     else:
         # Filter out 2D-only properties for 3D images
@@ -196,6 +196,32 @@ def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, pr
             lambda row: (4 * np.pi * row['area']) / (row['perimeter']**2) if row['perimeter'] > 0 else 0,
             axis=1
         )
+
+    # Calculate Aspect Ratio
+    if 'major_axis_length' in df and 'minor_axis_length' in df:
+        df['aspect_ratio'] = df.apply(
+            lambda row: row['major_axis_length'] / row['minor_axis_length'] if row['minor_axis_length'] > 0 else 0,
+            axis=1
+        )
+
+    # Calculate Roundness
+    if 'area' in df and 'major_axis_length' in df:
+        df['roundness'] = df.apply(
+            lambda row: (4 * row['area']) / (np.pi * row['major_axis_length']**2) if row['major_axis_length'] > 0 else 0,
+            axis=1
+        )
+
+    # Flatten Hu Moments if present
+    if 'moments_hu-0' in df.columns:
+        # Scikit-image returned moments_hu as separate columns (moments_hu-0, moments_hu-1, ...)
+        # We rename them to match expected format (moments_hu_0)
+        rename_dict = {col: col.replace('-', '_') for col in df.columns if col.startswith('moments_hu-')}
+        df = df.rename(columns=rename_dict)
+    elif 'moments_hu' in df.columns:
+        # If it's a single column of arrays/tuples
+        moments = df['moments_hu'].apply(pd.Series)
+        moments.columns = [f'moments_hu_{i}' for i in range(moments.shape[1])]
+        df = pd.concat([df.drop(['moments_hu'], axis=1), moments], axis=1)
     
     # Calculate 3D-specific metrics
     if is_3d and 'area' in df:

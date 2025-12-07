@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scientific-image-analyzer"
+version = "1.0.0"
+description = "Multi-dimensional microscopy image analysis suite"
+authors = [
+    {name = "Scientific Computing Team"},
+]
+readme = "COMPLETE_PACKAGE_README.md"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "napari[all]>=0.4.18",
+    "PyQt6>=6.4.0",
+    "PyQt6-Qt6>=6.4.0",
+    "qtpy>=2.3.0",
+    "magicgui>=0.5.0",
+    "numpy>=1.21.0",
+    "scipy>=1.9.0",
+    "scikit-image>=0.19.0",
+    "matplotlib>=3.5.0",
+    "pandas>=1.5.0",
+    "aicsimageio>=4.9.4",
+    "tifffile>=2023.3.15",
+    "imageio>=2.25.0",
+    "Pillow>=9.0.0",
+    "h5py>=3.7.0",
+    "zarr>=2.13.0",
+    "dask>=2023.1.0",
+    "napari-plugin-engine>=0.2.0",
+    "napari-svg>=0.2.1",
+    "npe2>=0.7.9",
+    "Flask>=2.3.0",
+    "Werkzeug>=2.3.0",
+    "requests>=2.28.0",
+    "mrcfile>=1.4.0",
+    "opencv-python>=4.7.0",
+    "numpydoc>=1.9.0",
+    "ome-types>=0.6.2",
+    "ome-zarr>=0.10.2",
+    "console>=0.1.4",
+]
+
+[project.optional-dependencies]
+ai = [
+    "cellpose>=2.2.0",
+    "stardist>=0.8.3",
+    "csbdeep>=0.7.4",
+    "torch>=1.13.0",
+]
+formats = [
+    "readlif>=0.6.4",
+    "pylibczirw>=3.1.1",
+    "nd2reader>=3.3.0",
+    "czifile>=2019.7.2",
+]
+tracking = [
+    "btrack>=0.5.0",
+    "trackpy>=0.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mhendzel2/3DIA"
+Repository = "https://github.com/mhendzel2/3DIA"
+Issues = "https://github.com/mhendzel2/3DIA/issues"
+
+[project.entry-points."napari.manifest"]
+scientific-image-analyzer = "scientific_analyzer:napari.yaml"
+
+[tool.setuptools]
+packages = {find = {where = ["src"]}}
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.json", "*.css", "*.html"]

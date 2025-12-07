@@ -36,3 +36,5 @@ contributions:
       display_name: Analysis
     - command: scientific-image-analyzer.visualization_widget
       display_name: 3D Visualization
+    - command: widgets.spots_detection_widget:spots_detection_widget
+      display_name: Spots Detection Wizard
