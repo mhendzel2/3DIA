@@ -383,7 +383,7 @@ class SmartFileLoader:
         return data, metadata
     
     @staticmethod
-    def _load_with_tifffile(file_path):
+    def _load_with_aicsimageio(file_path):
         """Load with aicsimageio (if available)"""
         from aicsimageio import AICSImage
         
@@ -639,15 +639,41 @@ class EnhancedFileIOWidget(QWidget):
             # Load first few to create stack
             if 'tifffile' in available_readers:
                 import tifffile
+                
+                # Read first image to get shape and dtype
                 first_img = tifffile.imread(image_files[0])
                 
-                # Create stack
-                stack_data = np.zeros((len(image_files),) + first_img.shape, dtype=first_img.dtype)
-                stack_data[0] = first_img
+                # Check if first image is already 3D (e.g. multi-page TIFF)
+                # If so, we might be loading a series of stacks (4D) or just one stack
                 
-                # Load remaining
-                for i, file_path in enumerate(image_files[1:], 1):
-                    stack_data[i] = tifffile.imread(file_path)
+                try:
+                    # Create stack
+                    # Note: This assumes all images have the same shape
+                    stack_shape = (len(image_files),) + first_img.shape
+                    stack_data = np.zeros(stack_shape, dtype=first_img.dtype)
+                    stack_data[0] = first_img
+                    
+                    # Load remaining
+                    for i, file_path in enumerate(image_files[1:], 1):
+                        img = tifffile.imread(file_path)
+                        if img.shape != first_img.shape:
+                            print(f"Warning: Shape mismatch in series. Expected {first_img.shape}, got {img.shape} for {file_path.name}")
+                            # Try to handle mismatch if it's just a missing dimension (e.g. (1, Y, X) vs (Y, X))
+                            if img.ndim == first_img.ndim - 1:
+                                img = np.expand_dims(img, axis=0)
+                            elif img.ndim == first_img.ndim + 1:
+                                img = np.squeeze(img)
+                            
+                            if img.shape != first_img.shape:
+                                raise ValueError(f"Shape mismatch: {first_img.shape} vs {img.shape}")
+                        
+                        stack_data[i] = img
+                except ValueError as e:
+                    self.show_error(f"Failed to load series due to shape mismatch: {str(e)}")
+                    return
+                except Exception as e:
+                    self.show_error(f"Error loading series: {str(e)}")
+                    return
                     
             else:
                 self.show_error("tifffile required for series loading")

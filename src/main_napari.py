@@ -94,7 +94,7 @@ def main():
     print("  • Volume Rendering (MIP, Alpha Blending, Orthogonal Views, Clipping)")
     print("  • Filament Tracing (Neuron/Cytoskeleton Analysis)")
     print("  • Advanced Cell Tracking (Lineage Trees, Gap Closing, Division Detection)")
-    print("Go to File > Open... to load an image.")
+    print("Use the 'File I/O' widget on the left to load images (supports .ims, .czi, .lif, etc).")
 
     # 3. Start the Napari event loop.
     napari.run()
