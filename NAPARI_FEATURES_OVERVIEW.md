@@ -1,4 +1,4 @@
-pip# PyMaris - Complete Napari Plugin Functionality Overview
+# PyMaris - Complete Napari Plugin Functionality Overview
 
 ## 🎯 Overview
 
@@ -26,7 +26,8 @@ Custom Dock Widgets (Our Added Functionality)
     ├── High-Content Analysis Widget
     ├── AI Segmentation Widget
     ├── Biophysics Widget
-    └── Interactive Plotting Widget
+    ├── Interactive Plotting Widget
+    └── Distance Tools Widget
 ```
 
 ---
@@ -70,6 +71,7 @@ Custom Dock Widgets (Our Added Functionality)
 
 - **Advanced Features:**
   - AI-based denoising (when available)
+  - Euclidean distance map generation (core/workflow backend)
   - Real-time preview
   - Batch processing mode
 
@@ -400,9 +402,13 @@ python src/main_napari.py
 | Lineage Trees | ✅ | ✅ | Complete |
 | Colocalization | ✅ | ✅ | Complete |
 | Statistics | ✅ | ✅ | Complete |
-| Distance Measurements | ✅ | ⏳ | Pending |
-| .ims File Support | ✅ | ⏳ | Pending |
-| Scene Management | ✅ | ⏳ | Pending |
+| AI Denoising | ✅ | ✅ | Complete (ai_denoise backend with NLM/bilateral/Wiener) |
+| Euclidean Distance Map Generation | ✅ | ✅ | Complete (restoration distance_map operation) |
+| Distance Measurements | ✅ | ✅ | Complete (core backend metrics) |
+| Distance Tools Widget | ✅ | ✅ | Complete (distance map + pairwise queries UI) |
+| .ims File Support | ✅ | ✅ | Complete (AICS + h5py fallback) |
+| Scene Management | ✅ | ✅ | Complete (scene listing/selection) |
+| TrackMate XML Export | ✅ | ✅ | Complete (tracking export supports CSV + XML) |
 | Python API | Limited | ✅ | Superior |
 | Open Source | ❌ | ✅ | Advantage |
 | Cost | $$$$ | Free | Advantage |
@@ -479,11 +485,11 @@ src/
 9. **Threading** - All heavy operations non-blocking
 10. **Documentation** - Comprehensive guides and API docs
 
-### ⏳ Pending:
-1. **Distance Transform Widget** - Spot-to-spot, nearest neighbor
-2. **Enhanced Export** - .ims file format, TrackMate improvements
-3. **Scene Management** - Bookmarks, animation recording
-4. **Advanced Plotting** - More statistical visualizations
+### 🔭 Post-v1 Enhancements (Completed):
+1. **Distance Transform Widget** - dedicated UI for custom pairwise queries
+2. **Enhanced Export** - TrackMate XML export support added
+3. **Scene Management UI** - scene picker integrated into file loading flow
+4. **Advanced Plotting** - scatter/hexbin/histogram/box plot support
 
 ---
 

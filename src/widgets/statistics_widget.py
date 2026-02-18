@@ -2,14 +2,21 @@
 Statistics and Plotting Widget for Scientific Image Analyzer
 """
 
-import numpy as np
-import pandas as pd
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel,
-                             QComboBox, QGroupBox, QTableView)
-from PyQt6.QtCore import QAbstractTableModel, Qt
-import napari
-from skimage.measure import regionprops_table
 import matplotlib.pyplot as plt
+import napari
+import pandas as pd
+from PyQt6.QtCore import QAbstractTableModel, Qt
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QGroupBox,
+    QLabel,
+    QPushButton,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
+from skimage.measure import regionprops_table
+
 # Make seaborn optional to avoid startup failures when it's not installed
 try:
     import seaborn as sns  # type: ignore
@@ -159,4 +166,9 @@ class StatisticsWidget(QWidget):
                 plt.boxplot(self.dataframe[column].astype(float).dropna(), vert=True)
             plt.title(f"Box Plot of {column}")
 
+        # Avoid warning/no-op calls on non-interactive backends in headless test runs.
+        backend = str(plt.get_backend()).lower()
+        if "agg" in backend:
+            plt.close()
+            return
         plt.show()

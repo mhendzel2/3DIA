@@ -1,67 +1,73 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=69.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "scientific-image-analyzer"
-version = "1.0.0"
-description = "Multi-dimensional microscopy image analysis suite"
+version = "1.1.0"
+description = "Microscopy image analysis with a headless core and napari plugin"
 authors = [
-    {name = "Scientific Computing Team"},
+    { name = "Scientific Computing Team" },
 ]
-readme = "COMPLETE_PACKAGE_README.md"
-license = {text = "MIT"}
+readme = "README.md"
+license = { text = "MIT" }
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Image Processing",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
-    "napari[all]>=0.4.18",
-    "PyQt6>=6.4.0",
-    "PyQt6-Qt6>=6.4.0",
-    "qtpy>=2.3.0",
-    "magicgui>=0.5.0",
-    "numpy>=1.21.0",
-    "scipy>=1.9.0",
-    "scikit-image>=0.19.0",
-    "matplotlib>=3.5.0",
-    "pandas>=1.5.0",
-    "aicsimageio>=4.9.4",
-    "tifffile>=2023.3.15",
-    "imageio>=2.25.0",
-    "Pillow>=9.0.0",
-    "h5py>=3.7.0",
-    "zarr>=2.13.0",
-    "dask>=2023.1.0",
-    "napari-plugin-engine>=0.2.0",
-    "napari-svg>=0.2.1",
-    "npe2>=0.7.9",
-    "Flask>=2.3.0",
-    "Werkzeug>=2.3.0",
-    "requests>=2.28.0",
-    "mrcfile>=1.4.0",
-    "opencv-python>=4.7.0",
-    "numpydoc>=1.9.0",
-    "ome-types>=0.6.2",
-    "ome-zarr>=0.10.2",
-    "console>=0.1.4",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "scikit-image>=0.21.0",
+    "pandas>=2.0.0",
+    "imageio>=2.34.0",
+    "Pillow>=10.0.0",
+    "tifffile>=2024.2.12",
 ]
 
 [project.optional-dependencies]
+napari = [
+    "napari>=0.6.0",
+    "PyQt6>=6.6.0",
+    "PyQt6-Qt6>=6.6.0",
+    "qtpy>=2.4.0",
+    "magicgui>=0.8.0",
+    "npe2>=0.7.9",
+    "napari-plugin-engine>=0.2.0",
+    "napari-svg>=0.2.1",
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+]
+web = [
+    "Flask>=3.0.0",
+    "Werkzeug>=3.0.0",
+    "requests>=2.31.0",
+]
+io = [
+    "aicsimageio>=4.14.0",
+    "h5py>=3.10.0",
+    "zarr>=2.18.0",
+    "dask[array]>=2024.1.0",
+    "mrcfile>=1.4.0",
+    "ome-types>=0.6.2",
+    "ome-zarr>=0.10.2",
+    "opencv-python>=4.9.0",
+    "pims>=0.6.1",
+]
 ai = [
     "cellpose>=2.2.0",
     "stardist>=0.8.3",
     "csbdeep>=0.7.4",
-    "torch>=1.13.0",
+    "torch>=2.1.0",
+    "segment-anything>=1.0",
 ]
 formats = [
     "readlif>=0.6.4",
@@ -73,19 +79,63 @@ tracking = [
     "btrack>=0.5.0",
     "trackpy>=0.5.0",
 ]
+dev = [
+    "pytest>=8.2.0",
+    "ruff>=0.8.0",
+    "pre-commit>=3.7.0",
+    "PyYAML>=6.0.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/mhendzel2/3DIA"
 Repository = "https://github.com/mhendzel2/3DIA"
 Issues = "https://github.com/mhendzel2/3DIA/issues"
 
+[project.scripts]
+pymaris-cli = "pymaris.cli:main"
+pymaris-napari = "pymaris_napari.app:main"
+pymaris-napari-configurable = "pymaris_napari.configurable:main"
+
 [project.entry-points."napari.manifest"]
-scientific-image-analyzer = "scientific_analyzer:napari.yaml"
+scientific-image-analyzer = "pymaris_napari:napari.yaml"
 
 [tool.setuptools]
-packages = {find = {where = ["src"]}}
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 include-package-data = true
+py-modules = [
+    "advanced_analysis",
+    "batch_processor",
+    "fibsem_plugins",
+    "file_io_napari",
+    "laminAmutants",
+    "main",
+    "main_napari",
+    "main_napari_configurable",
+    "scientific_analyzer",
+    "simple_analyzer",
+    "tif_diagnostic",
+    "timelapse_processor",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pymaris*", "pymaris_napari*", "utils*", "widgets*"]
+namespaces = true
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml", "*.yml", "*.json", "*.css", "*.html"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+filterwarnings = [
+    "ignore:Pickle, copy, and deepcopy support will be removed from itertools in Python 3\\.14\\.:DeprecationWarning",
+]

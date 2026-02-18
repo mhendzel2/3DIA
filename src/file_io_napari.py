@@ -75,7 +75,7 @@ def read_with_aicsimageio(path):
     ]
     
     if 'T' in img.dims.order:
-        scale.insert(0, 1.0)  # Placeholder time scale
+        scale.insert(0, _infer_time_scale_from_aics(img))
     
     # Prepare metadata for the Napari layer
     metadata = {
@@ -88,6 +88,26 @@ def read_with_aicsimageio(path):
     }
     
     return [(data, metadata, 'image')]
+
+
+def _infer_time_scale_from_aics(img):
+    """Infer time spacing from AICS metadata when available."""
+    try:
+        metadata = getattr(img, "metadata", None)
+        if metadata is None:
+            return 1.0
+        images = getattr(metadata, "images", None)
+        if not images:
+            return 1.0
+        pixels = getattr(images[0], "pixels", None)
+        if pixels is None:
+            return 1.0
+        time_increment = getattr(pixels, "time_increment", None)
+        if time_increment is None:
+            return 1.0
+        return float(time_increment)
+    except Exception:
+        return 1.0
 
 def read_with_tifffile(path):
     """Read using tifffile for TIFF images"""

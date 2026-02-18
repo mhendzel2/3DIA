@@ -347,20 +347,99 @@ if HAS_FLASK:
 
     @app.route('/track', methods=['POST'])
     def track_objects():
-        """
-        Object tracking endpoint.
-        
-        Currently not implemented. Object tracking requires:
-        - Time-series data (multiple frames)
-        - A tracking library like btrack, trackpy, or similar
-        
-        Returns HTTP 501 (Not Implemented) with information about the limitation.
-        """
-        return jsonify({
-            'error': 'Object tracking is not implemented in this version.',
-            'info': 'Tracking requires time-series data and additional dependencies (e.g., btrack).',
-            'suggestion': 'For tracking functionality, consider using napari with the btrack plugin directly.'
-        }), 501
+        """Object tracking endpoint using the core Hungarian tracking backend."""
+        payload = request.get_json() or {}
+        session_id = payload.get('session_id')
+        labels_key = payload.get('labels_key')
+        max_distance = float(payload.get('max_distance', 50.0))
+
+        if not session_id:
+            return jsonify({'error': 'session_id is required'}), 400
+        if session_id not in analysis_cache:
+            return jsonify({'error': 'Invalid session'}), 400
+
+        session_data = analysis_cache.get(session_id)
+        if session_data is None:
+            return jsonify({'error': 'Session data not found'}), 400
+
+        try:
+            labels_sequence = None
+
+            if labels_key:
+                candidate = session_data.get('processed_images', {}).get(str(labels_key))
+                labels_sequence = _coerce_labels_sequence(candidate)
+            else:
+                processed = session_data.get('processed_images', {})
+                for key, value in processed.items():
+                    if str(key).startswith('labels_'):
+                        labels_sequence = _coerce_labels_sequence(value)
+                        if labels_sequence:
+                            break
+
+            if not labels_sequence:
+                image = np.asarray(session_data.get('original_image'))
+                labels_sequence = _labels_from_timeseries(image)
+
+            if not labels_sequence or len(labels_sequence) < 2:
+                return jsonify({
+                    'error': (
+                        'Tracking requires at least two timepoints of labels. '
+                        'Provide a time-series labels array or a time-resolved image.'
+                    )
+                }), 400
+
+            from pymaris.backends import DEFAULT_REGISTRY  # local import keeps Flask startup lightweight
+
+            backend = DEFAULT_REGISTRY.get_tracking('hungarian')
+            result = backend.track(labels_sequence, max_distance=max_distance)
+
+            track_payload = {
+                'table': result.table,
+                'metadata': result.metadata,
+                'track_count': int(result.table.get('total_tracks', 0)),
+                'track_lengths': result.table.get('track_lengths', []),
+                'napari_tracks_preview': (
+                    result.tracks.get('napari_tracks', np.empty((0, 0)))[:200].tolist()
+                    if isinstance(result.tracks, dict)
+                    else []
+                ),
+            }
+            session_data.setdefault('results', {})['tracking'] = track_payload
+            analysis_cache.set(session_id, session_data)
+
+            return jsonify({
+                'success': True,
+                'tracking': track_payload,
+            })
+        except Exception as exc:
+            return jsonify({'error': f'Tracking failed: {exc}'}), 500
+
+
+    def _coerce_labels_sequence(value):
+        """Return a list of label images from list/tuple/ndarray inputs."""
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            output = [np.asarray(item) for item in value]
+            return output if len(output) >= 2 else None
+        array = np.asarray(value)
+        if array.ndim < 3:
+            return None
+        return [np.asarray(array[index]) for index in range(array.shape[0])]
+
+
+    def _labels_from_timeseries(image):
+        """Generate coarse labels from time-series intensity data as tracking fallback."""
+        if image.ndim < 3:
+            return None
+        frames = [np.asarray(image[index], dtype=float) for index in range(image.shape[0])]
+        labels_sequence = []
+        for frame in frames:
+            threshold = float(np.percentile(frame, 90))
+            mask = frame > threshold
+            labels, _ = ndi.label(mask)
+            labels_sequence.append(np.asarray(labels, dtype=np.int32))
+        return labels_sequence
 
     @app.route('/api/cache/stats', methods=['GET'])
     def get_cache_stats():

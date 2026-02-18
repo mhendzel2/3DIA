@@ -1,0 +1,19 @@
+{
+  "steps": [
+    {
+      "id": "wf-seg-0001",
+      "name": "segment_watershed",
+      "backend_type": "segmentation",
+      "backend_name": "watershed",
+      "params": {
+        "threshold": 100.0
+      },
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "labels"
+      ]
+    }
+  ]
+}

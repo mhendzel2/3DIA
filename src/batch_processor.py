@@ -29,6 +29,13 @@ except ImportError:
     np = None
 
 try:
+    import tifffile
+    HAS_TIFFFILE = True
+except ImportError:
+    tifffile = None  # type: ignore[assignment]
+    HAS_TIFFFILE = False
+
+try:
     from scipy import ndimage
     from skimage import filters
     HAS_SCIPY_SKIMAGE = True
@@ -535,11 +542,18 @@ class BatchProcessor:
             print(f"CSV export error: {e}")
     
     def _export_mask_simple(self, labels, filepath: str):
-        """Simple mask export (placeholder for TIFF)"""
+        """Export label masks to TIFF when available, otherwise fallback text."""
         try:
-            # For now, export as text format
-            with open(filepath.replace('.tiff', '.txt'), 'w') as f:
-                for row in labels:
+            labels_array = np.asarray(labels, dtype=np.uint16) if HAS_NUMPY else labels
+            if HAS_TIFFFILE and HAS_NUMPY:
+                tifffile.imwrite(filepath, labels_array, photometric='minisblack')
+                return
+
+            fallback = filepath
+            if fallback.lower().endswith(('.tif', '.tiff')):
+                fallback = fallback.rsplit('.', 1)[0] + '.txt'
+            with open(fallback, 'w') as f:
+                for row in labels_array:
                     f.write(' '.join(map(str, row)) + '\n')
         except Exception as e:
             print(f"Mask export error: {e}")

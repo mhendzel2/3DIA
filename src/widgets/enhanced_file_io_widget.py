@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QFileDialog, QComboBox, QSpinBox, 
-                             QCheckBox, QGroupBox, QProgressBar, QTextEdit)
+                             QCheckBox, QGroupBox, QProgressBar, QTextEdit, QInputDialog)
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 import napari
 from napari.layers import Image
@@ -94,9 +94,12 @@ class SmartFileLoader:
     """Smart file loader that uses the best available reader for each format"""
     
     @staticmethod
-    def load_image(file_path):
+    def load_image(file_path, load_options=None):
         """Load image using the best available reader"""
         file_path = Path(file_path)
+        load_options = load_options or {}
+        scene = load_options.get('scene')
+        scene_index = load_options.get('scene_index')
         ext = file_path.suffix.lower()
         
         # Try format-specific readers first (most reliable)
@@ -118,12 +121,15 @@ class SmartFileLoader:
         if ext == '.zarr' and 'zarr' in available_readers:
             return SmartFileLoader._load_with_zarr(file_path)
         
+        if ext == '.ims' and 'aicsimageio' in available_readers:
+            return SmartFileLoader._load_with_aicsimageio(file_path, scene=scene, scene_index=scene_index)
+        
         if ext == '.ims' and 'h5py' in available_readers:
-            return SmartFileLoader._load_with_imaris(file_path)
+            return SmartFileLoader._load_with_imaris(file_path, scene=scene, scene_index=scene_index)
         
         # Try aicsimageio for everything (if available)
         if 'aicsimageio' in available_readers:
-            return SmartFileLoader._load_with_aicsimageio(file_path)
+            return SmartFileLoader._load_with_aicsimageio(file_path, scene=scene, scene_index=scene_index)
         
         # Try pims as universal fallback
         if 'pims' in available_readers:
@@ -294,8 +300,38 @@ class SmartFileLoader:
         return data, metadata
     
     @staticmethod
-    def _load_with_imaris(file_path):
+    def _load_with_imaris(file_path, scene=None, scene_index=None):
         """Load Imaris .ims file (HDF5 format)"""
+        try:
+            from pymaris.io import list_scenes as core_list_scenes
+            from pymaris.io import open_image as core_open_image
+        except Exception:
+            core_list_scenes = None
+            core_open_image = None
+        
+        if core_open_image is not None:
+            kwargs = {}
+            if scene is not None:
+                kwargs['scene'] = str(scene)
+            if scene_index is not None:
+                kwargs['scene_index'] = int(scene_index)
+            image = core_open_image(file_path, **kwargs)
+            data = np.asarray(image.as_numpy())
+            scale = list(image.scale_for_axes())
+            metadata = {
+                'name': file_path.stem,
+                'file_path': str(file_path),
+                'shape': data.shape,
+                'dtype': data.dtype,
+                'reader': 'pymaris.io (Imaris)',
+                'scale': scale,
+                'axes': list(image.axes),
+                'scene': image.metadata.get('scene'),
+                'available_scenes': core_list_scenes(file_path) if core_list_scenes is not None else [],
+                'pixel_size': dict(image.pixel_size),
+            }
+            return data, metadata
+        
         import h5py
         
         with h5py.File(file_path, 'r') as f:
@@ -366,7 +402,8 @@ class SmartFileLoader:
                 'shape': data.shape,
                 'dtype': data.dtype,
                 'reader': 'h5py (Imaris)',
-                'scale': [1.0] * data.ndim
+                'scale': [1.0] * data.ndim,
+                'scene': scene,
             }
             
             # Try to extract voxel size from Imaris metadata
@@ -383,12 +420,53 @@ class SmartFileLoader:
         return data, metadata
     
     @staticmethod
-    def _load_with_aicsimageio(file_path):
-        """Load with aicsimageio (if available)"""
+    def _load_with_aicsimageio(file_path, scene=None, scene_index=None):
+        """Load with aicsimageio while preserving microscopy dimensions."""
         from aicsimageio import AICSImage
         
         img = AICSImage(file_path)
-        data = img.get_image_data("YX")  # Simple 2D for now
+        scenes = [str(value) for value in getattr(img, "scenes", [])]
+        selected_scene = None
+        
+        if scene is not None and scene_index is not None:
+            raise ValueError("Provide either scene or scene_index, not both")
+        if scene_index is not None:
+            if scene_index < 0 or scene_index >= len(scenes):
+                raise IndexError(f"Scene index {scene_index} out of range for {file_path}")
+            selected_scene = scenes[scene_index]
+        elif scene is not None:
+            if scene not in scenes:
+                raise ValueError(f"Unknown scene '{scene}' for {file_path}")
+            selected_scene = scene
+        elif scenes:
+            selected_scene = scenes[0]
+        
+        if selected_scene is not None and hasattr(img, "set_scene"):
+            img.set_scene(selected_scene)
+        
+        dims_order = str(getattr(img.dims, "order", ""))
+        if "S" in dims_order:
+            raw = img.get_image_data("TCZYX", S=0)
+        else:
+            raw = img.get_image_data("TCZYX")
+        
+        data, axes = SmartFileLoader._squeeze_singleton_axes(np.asarray(raw), ("T", "C", "Z", "Y", "X"))
+        if data.ndim == 0:
+            data = data.reshape((1,))
+            axes = ("Y",)
+        
+        pps = img.physical_pixel_sizes
+        axis_scale = {
+            "T": 1.0,
+            "C": 1.0,
+            "Z": float(pps.Z) if pps.Z is not None else 1.0,
+            "Y": float(pps.Y) if pps.Y is not None else 1.0,
+            "X": float(pps.X) if pps.X is not None else 1.0,
+        }
+        scale = [float(axis_scale.get(axis, 1.0)) for axis in axes]
+        channel_names = [str(name) for name in (img.channel_names or [])]
+        if "C" not in axes:
+            channel_names = []
         
         metadata = {
             'name': file_path.stem,
@@ -396,10 +474,28 @@ class SmartFileLoader:
             'shape': data.shape,
             'dtype': data.dtype,
             'reader': 'aicsimageio',
-            'scale': [1.0] * data.ndim
+            'scale': scale,
+            'axes': list(axes),
+            'scene': selected_scene,
+            'available_scenes': scenes,
+            'channel_names': channel_names,
+            'dims_order': dims_order,
         }
         
         return data, metadata
+
+    @staticmethod
+    def _squeeze_singleton_axes(data, axes):
+        """Drop singleton dimensions while preserving axis labels."""
+        squeezed = np.asarray(data)
+        axis_labels = list(axes)
+        for idx in reversed(range(len(axis_labels))):
+            if idx < squeezed.ndim and squeezed.shape[idx] == 1:
+                squeezed = np.squeeze(squeezed, axis=idx)
+                axis_labels.pop(idx)
+        if not axis_labels:
+            axis_labels = ["Y"]
+        return squeezed, tuple(axis_labels)
     
     @staticmethod
     def _load_with_pims(file_path):
@@ -479,7 +575,7 @@ class FileLoadThread(QThread):
             self.progress.emit(10)
             
             # Use smart loader
-            data, metadata = SmartFileLoader.load_image(self.file_path)
+            data, metadata = SmartFileLoader.load_image(self.file_path, self.load_options)
             
             self.progress.emit(90)
             
@@ -589,7 +685,10 @@ class EnhancedFileIOWidget(QWidget):
         )
         
         if file_path:
-            self.load_image_file(file_path)
+            load_options = self._select_scene_load_options(file_path)
+            if load_options is None:
+                return
+            self.load_image_file(file_path, load_options=load_options)
             
     def open_series_dialog(self):
         """Open directory dialog for image series"""
@@ -601,7 +700,7 @@ class EnhancedFileIOWidget(QWidget):
         if directory:
             self.load_image_series(directory)
             
-    def load_image_file(self, file_path):
+    def load_image_file(self, file_path, load_options=None):
         """Load a single image file"""
         if not Path(file_path).exists():
             self.show_error(f"File not found: {file_path}")
@@ -612,11 +711,42 @@ class EnhancedFileIOWidget(QWidget):
         self.progress_bar.setValue(0)
         self.open_file_btn.setEnabled(False)
         
-        self.load_thread = FileLoadThread(file_path)
+        self.load_thread = FileLoadThread(file_path, load_options=load_options)
         self.load_thread.progress.connect(self.progress_bar.setValue)
         self.load_thread.finished_load.connect(self.on_image_loaded)
         self.load_thread.error_occurred.connect(self.on_load_error)
         self.load_thread.start()
+
+    def _select_scene_load_options(self, file_path):
+        """Prompt for a scene when a file exposes multiple scenes."""
+        extension = Path(file_path).suffix.lower()
+        if extension not in {".ims", ".czi", ".lif", ".nd2", ".oib", ".oif"}:
+            return {}
+        try:
+            from pymaris.io import list_scenes
+        except Exception:
+            return {}
+
+        try:
+            scenes = list_scenes(file_path)
+        except Exception:
+            return {}
+        if len(scenes) <= 1:
+            return {}
+
+        selected, ok = QInputDialog.getItem(
+            self,
+            "Select Scene",
+            "This file contains multiple scenes:",
+            scenes,
+            0,
+            False,
+        )
+        if not ok:
+            return None
+        if not selected:
+            return {}
+        return {"scene": str(selected)}
         
     def load_image_series(self, directory):
         """Load image series from directory"""

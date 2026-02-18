@@ -416,11 +416,12 @@ class FilamentTracingWidget(QWidget):
 
         image_data = np.asarray(layer.data)
 
-        # For 3D data, user might want to trace in 2D slices or full 3D
-        if image_data.ndim > 2:
-            # For now, use maximum intensity projection
-            self.status_label.setText("Processing 3D data (using MIP)...")
-            image_data = np.max(image_data, axis=0)
+        # Tracing backend supports 2D/3D data. For higher-rank arrays (e.g. TCZYX),
+        # keep the first index of leading non-spatial dimensions and preserve 3D.
+        if image_data.ndim > 3:
+            self.status_label.setText("Reducing >3D data to first time/channel volume...")
+            while image_data.ndim > 3:
+                image_data = image_data[0]
 
         # Prepare parameters for core tracing backend
         parameters = {

@@ -1,0 +1,144 @@
+name: scientific-image-analyzer
+display_name: Scientific Image Analyzer
+schema_version: 0.2.1
+version: 1.1.0
+author: Scientific Computing Team
+description: Multi-dimensional microscopy image analysis suite
+license: MIT
+
+contributions:
+  commands:
+    - id: scientific-image-analyzer.get_reader
+      title: Open microscopy image
+      python_name: pymaris_napari._io:get_reader
+
+    - id: scientific-image-analyzer.write_tiff
+      title: Save image as TIFF
+      python_name: pymaris_napari._io:write_tiff
+
+    - id: scientific-image-analyzer.widget.file_io
+      title: File I/O widget
+      python_name: pymaris_napari._widgets:file_io_widget
+
+    - id: scientific-image-analyzer.widget.processing
+      title: Image Processing widget
+      python_name: pymaris_napari._widgets:processing_widget
+
+    - id: scientific-image-analyzer.widget.segmentation
+      title: Segmentation widget
+      python_name: pymaris_napari._widgets:segmentation_widget
+
+    - id: scientific-image-analyzer.widget.analysis
+      title: Analysis widget
+      python_name: pymaris_napari._widgets:analysis_widget
+
+    - id: scientific-image-analyzer.widget.visualization
+      title: Visualization widget
+      python_name: pymaris_napari._widgets:visualization_widget
+
+    - id: scientific-image-analyzer.widget.statistics
+      title: Statistics widget
+      python_name: pymaris_napari._widgets:statistics_widget
+
+    - id: scientific-image-analyzer.widget.deconvolution
+      title: Deconvolution widget
+      python_name: pymaris_napari._widgets:deconvolution_widget
+
+    - id: scientific-image-analyzer.widget.tracking
+      title: Tracking widget
+      python_name: pymaris_napari._widgets:tracking_widget
+
+    - id: scientific-image-analyzer.widget.filament_tracing
+      title: Filament Tracing widget
+      python_name: pymaris_napari._widgets:filament_tracing_widget
+
+    - id: scientific-image-analyzer.widget.ai_segmentation
+      title: AI Segmentation widget
+      python_name: pymaris_napari._widgets:ai_segmentation_widget
+
+    - id: scientific-image-analyzer.widget.hca
+      title: High-Content Analysis widget
+      python_name: pymaris_napari._widgets:hca_widget
+
+    - id: scientific-image-analyzer.widget.simple_threshold
+      title: Simple Threshold widget
+      python_name: pymaris_napari._widgets:simple_threshold_widget
+
+    - id: scientific-image-analyzer.widget.adaptive_threshold
+      title: Adaptive Threshold widget
+      python_name: pymaris_napari._widgets:adaptive_threshold_widget
+
+    - id: scientific-image-analyzer.widget.workflow_runner
+      title: Workflow Runner widget
+      python_name: pymaris_napari._widgets:workflow_runner_widget
+
+    - id: scientific-image-analyzer.widget.distance_tools
+      title: Distance Tools widget
+      python_name: pymaris_napari._widgets:distance_tools_widget
+
+  readers:
+    - command: scientific-image-analyzer.get_reader
+      filename_patterns:
+        - '*.czi'
+        - '*.lif'
+        - '*.nd2'
+        - '*.oib'
+        - '*.oif'
+        - '*.tif'
+        - '*.tiff'
+        - '*.ims'
+        - '*.lsm'
+        - '*.zarr'
+        - '*.ome.zarr'
+      accepts_directories: true
+
+  writers:
+    - command: scientific-image-analyzer.write_tiff
+      layer_types: ['image']
+      filename_extensions: ['.tif', '.tiff']
+
+  widgets:
+    - command: scientific-image-analyzer.widget.file_io
+      display_name: File I/O
+
+    - command: scientific-image-analyzer.widget.processing
+      display_name: Image Processing
+
+    - command: scientific-image-analyzer.widget.segmentation
+      display_name: Segmentation
+
+    - command: scientific-image-analyzer.widget.analysis
+      display_name: Analysis
+
+    - command: scientific-image-analyzer.widget.visualization
+      display_name: 3D Visualization
+
+    - command: scientific-image-analyzer.widget.statistics
+      display_name: Statistics
+
+    - command: scientific-image-analyzer.widget.deconvolution
+      display_name: Deconvolution
+
+    - command: scientific-image-analyzer.widget.tracking
+      display_name: Cell Tracking & Lineage
+
+    - command: scientific-image-analyzer.widget.filament_tracing
+      display_name: Filament Tracing
+
+    - command: scientific-image-analyzer.widget.ai_segmentation
+      display_name: AI Segmentation
+
+    - command: scientific-image-analyzer.widget.hca
+      display_name: High-Content Analysis
+
+    - command: scientific-image-analyzer.widget.simple_threshold
+      display_name: Simple Threshold
+
+    - command: scientific-image-analyzer.widget.adaptive_threshold
+      display_name: Adaptive Threshold
+
+    - command: scientific-image-analyzer.widget.workflow_runner
+      display_name: Workflow Runner (Core Backends)
+
+    - command: scientific-image-analyzer.widget.distance_tools
+      display_name: Distance Tools

@@ -1,0 +1,85 @@
+{
+  "created_at": "2026-02-09T04:11:04.911859+00:00",
+  "environment": {
+    "captured_at": "2026-02-09T04:11:04.969939+00:00",
+    "packages": {
+      "dask": "2026.1.2",
+      "napari": "0.6.6",
+      "numpy": "2.4.2",
+      "scientific-image-analyzer": "1.1.0",
+      "scikit-image": "0.26.0",
+      "scipy": "1.17.0",
+      "tifffile": "2026.1.28"
+    },
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python_version": "3.12.3"
+  },
+  "inputs": [],
+  "outputs": [
+    {
+      "created_at": "2026-02-09T04:11:05.060438+00:00",
+      "kind": "graph",
+      "metadata": {
+        "keys": [
+          "avg_thickness",
+          "binary",
+          "branch_points",
+          "edge_count",
+          "filaments",
+          "node_count",
+          "num_branches",
+          "num_filaments",
+          "skeleton",
+          "threshold",
+          "total_length"
+        ]
+      },
+      "name": "trace",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260208-211104/outputs/meshes/trace.json",
+      "sha256_head": "b4b700c94388119c9c0a047147d33d2175154dba022bed30b4fba4a4a71f03b0",
+      "size_bytes": 77704
+    },
+    {
+      "created_at": "2026-02-09T04:11:05.167881+00:00",
+      "kind": "table",
+      "metadata": {
+        "columns": [
+          "avg_thickness",
+          "edge_count",
+          "node_count",
+          "num_branches",
+          "num_filaments",
+          "total_length"
+        ],
+        "rows": 1
+      },
+      "name": "trace_table",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260208-211104/outputs/tables/trace_table.csv",
+      "sha256_head": "e162c7b7e6e7059a9c4554870359011048112100d90895838773b30b07983e7e",
+      "size_bytes": 111
+    }
+  ],
+  "schema_version": "0.1.0",
+  "workflow_steps": [
+    {
+      "created_at": "2026-02-09T04:11:05.220884+00:00",
+      "id": "step-0001",
+      "inputs": [
+        "image"
+      ],
+      "name": "tracing:skeleton",
+      "outputs": [
+        "trace"
+      ],
+      "params": {
+        "detect_branches": true,
+        "extract_paths": true,
+        "gaussian_sigma": 1.0,
+        "manual_threshold": 10,
+        "measure_thickness": true,
+        "min_object_size": 10,
+        "threshold_method": "manual"
+      }
+    }
+  ]
+}

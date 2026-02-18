@@ -33,6 +33,7 @@ jobs:
             src/pymaris \
             src/pymaris_napari \
             tests/test_backends_registry.py \
+            tests/test_backend_parity.py \
             tests/test_core_boundary.py \
             tests/test_image_volume_and_io.py \
             tests/test_legacy_shims.py \
@@ -43,14 +44,33 @@ jobs:
             tests/test_npe2_manifest.py \
             tests/test_phase0_baseline_docs.py \
             tests/test_project_store.py \
+            tests/test_reconstruction_core.py \
+            tests/test_reconstruction_plugin_parity.py \
+            tests/test_reconstruction_qa.py \
             tests/test_ui_provenance.py \
             tests/test_workflow_jobs.py \
             tests/test_workflow_examples.py \
+            tests/test_workflow_runner_api.py \
             tests/test_workflow_validation.py \
-            tests/test_cli.py
+            tests/test_cli.py \
+            tests/test_benchmark.py
 
       - name: Pytest
         run: pytest tests -q
+
+      - name: Benchmark Gate
+        run: |
+          python -m pymaris.cli benchmark --suite baseline --repeats 1 --json > benchmark-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("benchmark-report.json").read_text(encoding="utf-8"))
+          failed_cases = int(report.get("summary", {}).get("failed_cases", 0))
+          if failed_cases:
+              raise SystemExit(f"benchmark gate failed: {failed_cases} case(s) failed")
+          print("benchmark gate passed")
+          PY
 
   napari-widget-smoke:
     runs-on: ubuntu-latest

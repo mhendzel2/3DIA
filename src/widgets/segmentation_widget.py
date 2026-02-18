@@ -8,9 +8,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QSpinBox, QDoubleSpinBox, QComboBox, 
                              QGroupBox, QCheckBox, QTableWidget, QTableWidgetItem,
                              QProgressBar, QTabWidget)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-import napari
-from napari.layers import Image, Points, Surface, Labels
+from PyQt6.QtCore import QThread, pyqtSignal
+from napari.layers import Image
 
 from skimage import measure, morphology, segmentation
 from skimage.feature import blob_log, blob_dog, blob_doh
@@ -19,6 +18,14 @@ from scipy.spatial.distance import cdist
 
 from utils.image_utils import validate_image_layer
 from utils.analysis_utils import calculate_object_statistics
+from pymaris.data_model import ImageVolume, infer_axes_from_shape
+from pymaris.jobs import JobCancelledError, JobRunner
+from pymaris.workflow import WorkflowResult, WorkflowStep
+from pymaris_napari.provenance import record_ui_workflow_result
+from pymaris_napari.settings import (
+    load_project_store_settings,
+    resolve_project_store_dir,
+)
 
 class SegmentationThread(QThread):
     """Thread for time-consuming segmentation operations"""
@@ -250,13 +257,28 @@ class SegmentationThread(QThread):
 
 class SegmentationWidget(QWidget):
     """Widget for segmentation and object detection"""
+    workflow_progress = pyqtSignal(int, str)
+    workflow_finished = pyqtSignal(object)
+    workflow_failed = pyqtSignal(str)
+    workflow_cancelled = pyqtSignal(str)
     
     def __init__(self, viewer):
         super().__init__()
         self.viewer = viewer
         self.segmentation_thread = None
+        self.job_runner = JobRunner(max_workers=2)
+        self.workflow_handle = None
+        self.workflow_step = None
+        self.current_operation = None
+        self.current_input_layer_name = None
+        self.project_store_settings = load_project_store_settings()
+        self.project_session_dir_cache = None
         self.current_results = {}
         self.init_ui()
+        self.workflow_progress.connect(self.on_workflow_progress)
+        self.workflow_finished.connect(self.on_workflow_finished)
+        self.workflow_failed.connect(self.on_workflow_error)
+        self.workflow_cancelled.connect(self.on_workflow_cancelled)
         
     def init_ui(self):
         """Initialize the user interface"""
@@ -298,6 +320,11 @@ class SegmentationWidget(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
+        self.cancel_btn = QPushButton("Cancel Current Operation")
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setEnabled(False)
+        self.cancel_btn.clicked.connect(self.cancel_current_operation)
+        layout.addWidget(self.cancel_btn)
         
         # Results table
         results_group = QGroupBox("Analysis Results")
@@ -530,8 +557,8 @@ class SegmentationWidget(QWidget):
             'threshold': self.watershed_threshold.value(),
             'auto_markers': self.auto_markers_check.isChecked()
         }
-        
-        self.start_segmentation("watershed", layer.data, parameters)
+
+        self.start_watershed_workflow(layer, parameters)
         
     def label_objects(self):
         """Label connected objects"""
@@ -561,15 +588,112 @@ class SegmentationWidget(QWidget):
             print(f"Auto-calculated surface level: {auto_level:.1f}")
         except Exception as e:
             self.show_error(f"Auto level calculation failed: {str(e)}")
+
+    def start_watershed_workflow(self, layer, parameters):
+        """Run watershed through the core workflow/job infrastructure."""
+        if self.workflow_handle and not self.workflow_handle.done():
+            self.show_error("Another workflow job is already running")
+            return
+
+        image = ImageVolume(
+            array=np.asarray(layer.data),
+            axes=infer_axes_from_shape(np.asarray(layer.data).shape),
+            metadata={"name": layer.name},
+        )
+        self.current_operation = "watershed"
+        self.current_input_layer_name = layer.name
+
+        self.workflow_step = WorkflowStep(
+            id=f"segmentation-watershed-{len(self.current_results) + 1:04d}",
+            name="segmentation:watershed",
+            backend_type="segmentation",
+            backend_name="watershed",
+            params={"threshold": float(parameters.get("threshold", 0))},
+            inputs=["image"],
+            outputs=["labels"],
+        )
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.cancel_btn.setVisible(True)
+        self.cancel_btn.setEnabled(True)
+        self.set_buttons_enabled(False)
+
+        self.workflow_handle = self.job_runner.submit(
+            step=self.workflow_step,
+            context={"image": image},
+            on_progress=lambda p, m: self.workflow_progress.emit(p, m),
+        )
+        self.workflow_handle.future.add_done_callback(self._on_workflow_job_done)
+
+    def _on_workflow_job_done(self, future):
+        """Bridge background workflow completion back to Qt signals."""
+        try:
+            result = future.result()
+            self.workflow_finished.emit(result)
+        except JobCancelledError as exc:
+            self.workflow_cancelled.emit(str(exc))
+        except Exception as exc:
+            self.workflow_failed.emit(str(exc))
+
+    def on_workflow_progress(self, value, message):
+        """Update progress UI from workflow callbacks."""
+        self.progress_bar.setValue(int(value))
+
+    def on_workflow_finished(self, result):
+        """Handle successful workflow completion."""
+        try:
+            if not isinstance(result, WorkflowResult):
+                self.show_error("Unexpected workflow result type")
+                return
+            labels = result.outputs.get("labels")
+            if labels is None:
+                self.show_error("Workflow finished without labels output")
+                return
+            metadata = dict(result.metadata)
+            metadata["operation"] = self.current_operation or "watershed"
+            self.on_segmentation_finished(labels, metadata, "labels")
+        finally:
+            self.workflow_handle = None
+            self.workflow_step = None
+            self.cancel_btn.setVisible(False)
+            self.cancel_btn.setEnabled(False)
+
+    def on_workflow_error(self, message):
+        """Handle workflow execution errors."""
+        self.workflow_handle = None
+        self.workflow_step = None
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setEnabled(False)
+        self.on_segmentation_error(message)
+
+    def on_workflow_cancelled(self, message):
+        """Handle workflow cancellation."""
+        self.workflow_handle = None
+        self.workflow_step = None
+        self.progress_bar.setVisible(False)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setEnabled(False)
+        self.set_buttons_enabled(True)
+        self.show_error(message or "Operation cancelled")
             
     def start_segmentation(self, operation, data, parameters):
         """Start segmentation operation in background thread"""
         if self.segmentation_thread and self.segmentation_thread.isRunning():
             self.show_error("Segmentation already in progress")
             return
+        if self.workflow_handle and not self.workflow_handle.done():
+            self.show_error("Workflow job already in progress")
+            return
+
+        layer = self.get_current_layer()
+        self.current_operation = operation
+        self.current_input_layer_name = layer.name if layer is not None else None
             
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
+        self.cancel_btn.setVisible(True)
+        self.cancel_btn.setEnabled(True)
         self.set_buttons_enabled(False)
         
         self.segmentation_thread = SegmentationThread(operation, data, parameters)
@@ -626,6 +750,8 @@ class SegmentationWidget(QWidget):
                 'statistics': stats,
                 'metadata': metadata
             }
+
+            self.record_provenance(layer_name=layer_name, data=data, metadata=metadata, stats=stats, layer_type=layer_type)
             
             self.update_results_table()
             self.export_results_btn.setEnabled(True)
@@ -636,12 +762,16 @@ class SegmentationWidget(QWidget):
             self.show_error(f"Failed to create layer: {str(e)}")
         finally:
             self.progress_bar.setVisible(False)
+            self.cancel_btn.setVisible(False)
+            self.cancel_btn.setEnabled(False)
             self.set_buttons_enabled(True)
             
     def on_segmentation_error(self, error_message):
         """Handle segmentation errors"""
         self.show_error(error_message)
         self.progress_bar.setVisible(False)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.setEnabled(False)
         self.set_buttons_enabled(True)
         
     def calculate_spot_statistics(self, coords, metadata):
@@ -759,6 +889,63 @@ class SegmentationWidget(QWidget):
         self.create_surface_btn.setEnabled(enabled)
         self.watershed_btn.setEnabled(enabled)
         self.label_objects_btn.setEnabled(enabled)
+
+    def cancel_current_operation(self):
+        """Cancel the current thread/job operation if running."""
+        if self.workflow_handle and not self.workflow_handle.done():
+            self.workflow_handle.cancel()
+        if self.segmentation_thread and self.segmentation_thread.isRunning():
+            self.segmentation_thread.cancel()
+
+    def _resolve_project_store_dir(self):
+        """Resolve project store location from shared napari settings."""
+        self.project_store_settings = load_project_store_settings()
+        naming = str(self.project_store_settings.get("session_naming", "timestamp"))
+        if naming == "timestamp":
+            resolved = resolve_project_store_dir(
+                self.project_store_settings,
+                session_dir_cache=self.project_session_dir_cache,
+            )
+            if self.project_session_dir_cache is None:
+                self.project_session_dir_cache = resolved
+            return resolved
+        return resolve_project_store_dir(self.project_store_settings)
+
+    def record_provenance(self, layer_name, data, metadata, stats, layer_type):
+        """Record output + workflow step into ProjectStore."""
+        try:
+            step = WorkflowStep(
+                id=f"segmentation-{self.current_operation or layer_type}-{len(self.current_results):04d}",
+                name=f"segmentation:{self.current_operation or layer_type}",
+                backend_type="segmentation",
+                backend_name="watershed" if self.current_operation == "watershed" else "legacy",
+                params=dict(metadata or {}),
+                inputs=[self.current_input_layer_name] if self.current_input_layer_name else [],
+                outputs=[layer_name],
+            )
+            output_payload = {}
+            if layer_type == "labels" and isinstance(data, np.ndarray):
+                output_payload[layer_name] = data
+            result = WorkflowResult(
+                outputs=output_payload,
+                tables={f"{layer_name}_table": stats if isinstance(stats, dict) else {"value": str(stats)}},
+                metadata=dict(metadata or {}),
+            )
+            source_paths = []
+            current_layer = self.get_current_layer()
+            if current_layer is not None:
+                source_path = getattr(current_layer, "metadata", {}).get("source_path")
+                if source_path:
+                    source_paths.append(str(source_path))
+            project_dir = self._resolve_project_store_dir()
+            record_ui_workflow_result(
+                project_dir=project_dir,
+                step=step,
+                result=result,
+                source_paths=source_paths,
+            )
+        except Exception as exc:
+            print(f"WARNING: Failed to record segmentation provenance: {exc}")
         
     def update_layer_choices(self):
         """Update the layer selection combo box"""
@@ -787,3 +974,6 @@ class SegmentationWidget(QWidget):
         if self.segmentation_thread and self.segmentation_thread.isRunning():
             self.segmentation_thread.quit()
             self.segmentation_thread.wait()
+        if self.workflow_handle and not self.workflow_handle.done():
+            self.workflow_handle.cancel()
+        self.job_runner.shutdown(wait=False)

@@ -62,12 +62,9 @@ class HCAAnalysisThread(QThread):
             
             self.progress.emit(50)
             
+            self.progress.emit(65)
             batch_processor.process_batch(batch_id)
-            
-            import time
-            time.sleep(2)  # Simulate processing time
-            
-            self.progress.emit(80)
+            self.progress.emit(90)
             
             results = batch_processor.get_batch_results(batch_id)
             

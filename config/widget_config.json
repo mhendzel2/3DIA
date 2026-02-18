@@ -14,7 +14,9 @@
         "hca": true,
         "ai_segmentation": false,
         "biophysics": false,
-        "interactive_plotting": false
+        "interactive_plotting": false,
+        "distance_tools": false,
+        "workflow_runner": true
     },
     "widget_areas": {
         "file_io": "left",
@@ -31,8 +33,17 @@
         "hca": "right",
         "ai_segmentation": "right",
         "biophysics": "right",
-        "interactive_plotting": "right"
+        "interactive_plotting": "right",
+        "distance_tools": "right",
+        "workflow_runner": "right"
     },
     "load_on_startup": true,
+    "project_store": {
+        "base_project_dir": ".pymaris_project",
+        "provenance_enabled": true,
+        "session_name": "default",
+        "session_naming": "timestamp",
+        "session_prefix": "session"
+    },
     "show_welcome_message": true
 }

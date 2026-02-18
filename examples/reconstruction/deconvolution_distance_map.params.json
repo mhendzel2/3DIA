@@ -1,0 +1,6 @@
+{
+  "operation": "distance_map",
+  "method": "distance_map",
+  "threshold": 0.0,
+  "distance_to": "background"
+}

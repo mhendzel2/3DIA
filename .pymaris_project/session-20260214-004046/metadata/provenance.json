@@ -1,0 +1,123 @@
+{
+  "created_at": "2026-02-14T07:40:46.569229+00:00",
+  "environment": {
+    "captured_at": "2026-02-14T07:40:46.596672+00:00",
+    "packages": {
+      "dask": "2026.1.2",
+      "napari": "0.6.6",
+      "numpy": "2.4.2",
+      "scientific-image-analyzer": "1.1.0",
+      "scikit-image": "0.26.0",
+      "scipy": "1.17.0",
+      "tifffile": "2026.1.28"
+    },
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python_version": "3.12.3"
+  },
+  "inputs": [],
+  "outputs": [
+    {
+      "created_at": "2026-02-14T07:40:46.648131+00:00",
+      "kind": "image",
+      "metadata": {
+        "axes": [
+          "Y",
+          "X"
+        ],
+        "axis_units": {},
+        "channel_names": [],
+        "modality": null,
+        "pixel_size": {},
+        "source_metadata": {
+          "name": "test_image"
+        },
+        "time_spacing": null
+      },
+      "name": "richardson_lucy_deconvolved",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260214-004046/outputs/images/richardson_lucy_deconvolved.tif",
+      "sha256_head": "4df91b9484b135b17140b91b7b7931c37e68ec2d008c9f4e84227d1e930a2c7c",
+      "size_bytes": 80272
+    },
+    {
+      "created_at": "2026-02-14T07:40:46.705892+00:00",
+      "kind": "table",
+      "metadata": {
+        "columns": [],
+        "rows": 1
+      },
+      "name": "richardson_lucy_deconvolved_table",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260214-004046/outputs/tables/richardson_lucy_deconvolved_table.csv",
+      "sha256_head": "dba5166ad9db9ba648c1032ebbd34dcd0d085b50023b839ef5c68ca1db93a563",
+      "size_bytes": 4
+    },
+    {
+      "created_at": "2026-02-14T07:40:47.630751+00:00",
+      "kind": "image",
+      "metadata": {
+        "axes": [
+          "Y",
+          "X"
+        ],
+        "axis_units": {},
+        "channel_names": [],
+        "modality": null,
+        "pixel_size": {},
+        "source_metadata": {
+          "name": "test_image"
+        },
+        "time_spacing": null
+      },
+      "name": "wiener_deconvolved",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260214-004046/outputs/images/wiener_deconvolved.tif",
+      "sha256_head": "14aae8a4a94fb95ab2722e169133b258cb29ab2ab98f370f31b51698237da052",
+      "size_bytes": 80272
+    },
+    {
+      "created_at": "2026-02-14T07:40:47.687461+00:00",
+      "kind": "table",
+      "metadata": {
+        "columns": [],
+        "rows": 1
+      },
+      "name": "wiener_deconvolved_table",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260214-004046/outputs/tables/wiener_deconvolved_table.csv",
+      "sha256_head": "dba5166ad9db9ba648c1032ebbd34dcd0d085b50023b839ef5c68ca1db93a563",
+      "size_bytes": 4
+    }
+  ],
+  "schema_version": "0.2.0",
+  "workflow_steps": [
+    {
+      "created_at": "2026-02-14T07:40:46.751211+00:00",
+      "id": "step-0001",
+      "inputs": [
+        "image"
+      ],
+      "name": "restoration:richardson_lucy",
+      "outputs": [
+        "richardson_lucy_deconvolved"
+      ],
+      "params": {
+        "iterations": 10,
+        "method": "richardson_lucy",
+        "operation": "deconvolve"
+      }
+    },
+    {
+      "created_at": "2026-02-14T07:40:47.733761+00:00",
+      "id": "step-0002",
+      "inputs": [
+        "image"
+      ],
+      "name": "restoration:wiener",
+      "outputs": [
+        "wiener_deconvolved"
+      ],
+      "params": {
+        "iterations": 10,
+        "method": "wiener",
+        "operation": "deconvolve"
+      }
+    }
+  ]
+}

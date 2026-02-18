@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mhendzel2/3DIA/schemas/workflow.schema.json",
+  "title": "PyMaris Workflow",
+  "description": "Serializable workflow definitions consumed by pymaris-cli and core WorkflowStep.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "steps"
+      ],
+      "properties": {
+        "workflow_version": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+){0,2}$",
+          "default": "1.0",
+          "description": "Workflow document version (major.minor[.patch])."
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Optional workflow-level metadata (author, purpose, modality, etc).",
+          "properties": {
+            "execution": {
+              "type": "object",
+              "description": "Optional execution controls for lazy loading, chunking, and safety limits.",
+              "properties": {
+                "prefer_lazy": {
+                  "type": "boolean"
+                },
+                "chunks": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "memory_budget_mb": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": true
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  ],
+  "$defs": {
+    "step": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "backend_type",
+        "backend_name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend_type": {
+          "type": "string",
+          "enum": [
+            "segmentation",
+            "tracking",
+            "tracing",
+            "restoration"
+          ]
+        },
+        "backend_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "type": "object"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

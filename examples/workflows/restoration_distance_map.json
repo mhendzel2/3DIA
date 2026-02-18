@@ -1,0 +1,25 @@
+{
+  "workflow_version": "1.0",
+  "metadata": {
+    "purpose": "Euclidean distance map generation from thresholded image data"
+  },
+  "steps": [
+    {
+      "id": "wf-rest-dist-0001",
+      "name": "distance_map",
+      "backend_type": "restoration",
+      "backend_name": "classic",
+      "params": {
+        "operation": "distance_map",
+        "threshold": 0.0,
+        "distance_to": "background"
+      },
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "distance_map"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "workflow_version": "1.0",
+  "metadata": {
+    "purpose": "AI-inspired denoising baseline"
+  },
+  "steps": [
+    {
+      "id": "wf-rest-ai-0001",
+      "name": "denoise_ai_nlm",
+      "backend_type": "restoration",
+      "backend_name": "ai_denoise",
+      "params": {
+        "operation": "denoise",
+        "method": "non_local_means",
+        "h": 10.0
+      },
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "denoised"
+      ]
+    }
+  ]
+}
