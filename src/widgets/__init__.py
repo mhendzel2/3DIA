@@ -1,0 +1,1 @@
+"""Legacy napari widget modules."""

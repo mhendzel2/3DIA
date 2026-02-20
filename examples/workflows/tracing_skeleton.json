@@ -1,0 +1,19 @@
+{
+  "steps": [
+    {
+      "id": "wf-trace-0001",
+      "name": "trace_skeleton",
+      "backend_type": "tracing",
+      "backend_name": "skeleton",
+      "params": {
+        "threshold": 0.0
+      },
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "trace"
+      ]
+    }
+  ]
+}

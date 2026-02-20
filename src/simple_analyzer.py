@@ -53,7 +53,7 @@ class SimpleImageAnalyzer:
         return labels
     
     @staticmethod
-    def measure_objects(labels):
+    def measure_objects(labels, image_data=None):
         """Basic object measurements"""
         measurements = []
         
@@ -66,10 +66,19 @@ class SimpleImageAnalyzer:
         
         for label_id in unique_labels:
             area = sum(sum(1 for val in row if val == label_id) for row in labels)
+            if image_data is not None:
+                intensity_values = []
+                for y, row in enumerate(labels):
+                    for x, val in enumerate(row):
+                        if val == label_id:
+                            intensity_values.append(float(image_data[y][x]))
+                mean_intensity = float(sum(intensity_values) / len(intensity_values)) if intensity_values else 0.0
+            else:
+                mean_intensity = 0.0
             measurements.append({
                 'label': label_id,
                 'area': area,
-                'mean_intensity': 128  # Placeholder
+                'mean_intensity': mean_intensity
             })
         
         return measurements
@@ -184,7 +193,7 @@ class SimpleRequestHandler(http.server.BaseHTTPRequestHandler):
             # Perform simple analysis
             image_data = sessions[session_id]['image_data']
             labels = SimpleImageAnalyzer.simple_threshold(image_data)
-            measurements = SimpleImageAnalyzer.measure_objects(labels)
+            measurements = SimpleImageAnalyzer.measure_objects(labels, image_data=image_data)
             
             response = {
                 'status': 'success',

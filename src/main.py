@@ -43,7 +43,7 @@ def launch_napari_interface():
     except ImportError as e:
         print(f"Napari interface not available: {e}")
         print("Note: Napari requires additional dependencies")
-        print("Install with: pip install napari[all] cellpose stardist")
+        print("Install with: pip install -e \".[napari]\"")
         return False
 
 def launch_web_interface():

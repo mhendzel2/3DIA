@@ -96,28 +96,59 @@ def segment_watershed(image):
     labels = segmentation.watershed(-distance, markers, mask=image)
     return labels
 
-def calculate_object_statistics(labeled_image, intensity_image=None, properties=None):
+def calculate_object_statistics(labeled_image, intensity_image=None, properties=None, voxel_size=None):
     """
     Calculate comprehensive statistics for labeled objects.
     Uses scikit-image if available, otherwise provides basic pure Python measurements.
+    
+    Args:
+        labeled_image: Integer labeled image (2D or 3D)
+        intensity_image: Optional intensity image for intensity measurements
+        properties: Optional list of properties to compute
+        voxel_size: Optional tuple of (z, y, x) or (y, x) voxel dimensions for 
+                   physical unit measurements. If None, measurements are in pixels.
+    
+    Returns:
+        Dictionary containing object statistics
     """
     if HAS_SCIENTIFIC_LIBS:
         try:
-            return _calculate_object_statistics_skimage(labeled_image, intensity_image, properties)
+            return _calculate_object_statistics_skimage(labeled_image, intensity_image, properties, voxel_size)
         except Exception as e:
             print(f"Scikit-image analysis failed: {e}. Using fallback.")
-            return _calculate_object_statistics_fallback(labeled_image, intensity_image)
+            return _calculate_object_statistics_fallback(labeled_image, intensity_image, voxel_size)
     else:
-        return _calculate_object_statistics_fallback(labeled_image, intensity_image)
+        return _calculate_object_statistics_fallback(labeled_image, intensity_image, voxel_size)
 
-def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, properties=None):
+def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, properties=None, voxel_size=None):
     """scikit-image based implementation for object statistics."""
+    
+    # Determine dimensionality
+    ndim = labeled_image.ndim
+    is_3d = ndim == 3
+    
+    # Define 2D-only and 3D-compatible properties
+    props_2d_only = {'perimeter', 'convex_area', 'major_axis_length', 'minor_axis_length', 
+                     'eccentricity', 'orientation', 'feret_diameter_max'}
+    props_3d_compatible = {'label', 'area', 'centroid', 'bbox', 'solidity', 'extent'}
+    
     if properties is None:
-        properties = [
-            'label', 'area', 'centroid', 'bbox', 'perimeter', 'convex_area',
-            'major_axis_length', 'minor_axis_length', 'eccentricity',
-            'orientation', 'solidity', 'extent', 'feret_diameter_max'
-        ]
+        # Select appropriate properties based on dimensionality
+        if is_3d:
+            properties = ['label', 'area', 'centroid', 'bbox', 'solidity', 'extent']
+        else:
+            properties = [
+                'label', 'area', 'centroid', 'bbox', 'perimeter', 'convex_area',
+                'major_axis_length', 'minor_axis_length', 'eccentricity',
+                'orientation', 'solidity', 'extent', 'feret_diameter_max', 'moments_hu'
+            ]
+    else:
+        # Filter out 2D-only properties for 3D images
+        if is_3d:
+            original_count = len(properties)
+            properties = [p for p in properties if p not in props_2d_only]
+            if len(properties) < original_count:
+                print(f"Note: Some 2D-only properties were skipped for 3D image analysis")
     
     # Add intensity properties if intensity image is provided
     if intensity_image is not None:
@@ -125,7 +156,7 @@ def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, pr
             'mean_intensity', 'max_intensity', 'min_intensity',
             'weighted_centroid'
         ]
-        properties.extend(intensity_props)
+        properties.extend([p for p in intensity_props if p not in properties])
     
     # Calculate region properties using skimage
     regions = measure.regionprops_table(
@@ -136,25 +167,86 @@ def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, pr
     
     df = pd.DataFrame(regions)
     
-    # Calculate custom Circularity (requires perimeter and area)
-    if 'area' in df and 'perimeter' in df:
+    # Apply voxel size scaling if provided
+    if voxel_size is not None:
+        voxel_size = np.array(voxel_size)
+        voxel_volume = np.prod(voxel_size)
+        
+        # Scale area/volume by voxel size
+        if 'area' in df:
+            df['area_pixels'] = df['area'].copy()  # Keep original pixel count
+            df['area'] = df['area'] * voxel_volume  # Physical units
+        
+        # Scale centroid coordinates
+        for i, dim in enumerate(['centroid-0', 'centroid-1', 'centroid-2'][:len(voxel_size)]):
+            if dim in df:
+                df[dim] = df[dim] * voxel_size[i]
+        
+        # Scale axis lengths (2D only)
+        if not is_3d:
+            pixel_size_2d = np.sqrt(voxel_size[-1] * voxel_size[-2]) if len(voxel_size) >= 2 else voxel_size[-1]
+            for col in ['major_axis_length', 'minor_axis_length', 'feret_diameter_max', 'perimeter']:
+                if col in df:
+                    df[f'{col}_pixels'] = df[col].copy()
+                    df[col] = df[col] * pixel_size_2d
+    
+    # Calculate custom Circularity (requires perimeter and area) - 2D only
+    if not is_3d and 'area' in df and 'perimeter' in df:
         df['circularity'] = df.apply(
             lambda row: (4 * np.pi * row['area']) / (row['perimeter']**2) if row['perimeter'] > 0 else 0,
             axis=1
         )
+
+    # Calculate Aspect Ratio
+    if 'major_axis_length' in df and 'minor_axis_length' in df:
+        df['aspect_ratio'] = df.apply(
+            lambda row: row['major_axis_length'] / row['minor_axis_length'] if row['minor_axis_length'] > 0 else 0,
+            axis=1
+        )
+
+    # Calculate Roundness
+    if 'area' in df and 'major_axis_length' in df:
+        df['roundness'] = df.apply(
+            lambda row: (4 * row['area']) / (np.pi * row['major_axis_length']**2) if row['major_axis_length'] > 0 else 0,
+            axis=1
+        )
+
+    # Flatten Hu Moments if present
+    if 'moments_hu-0' in df.columns:
+        # Scikit-image returned moments_hu as separate columns (moments_hu-0, moments_hu-1, ...)
+        # We rename them to match expected format (moments_hu_0)
+        rename_dict = {col: col.replace('-', '_') for col in df.columns if col.startswith('moments_hu-')}
+        df = df.rename(columns=rename_dict)
+    elif 'moments_hu' in df.columns:
+        # If it's a single column of arrays/tuples
+        moments = df['moments_hu'].apply(pd.Series)
+        moments.columns = [f'moments_hu_{i}' for i in range(moments.shape[1])]
+        df = pd.concat([df.drop(['moments_hu'], axis=1), moments], axis=1)
+    
+    # Calculate 3D-specific metrics
+    if is_3d and 'area' in df:
+        # For 3D, 'area' is actually volume
+        df.rename(columns={'area': 'volume'}, inplace=True)
+        
+        # Estimate surface area using a simple approximation (sphere)
+        # More accurate would require marching cubes, but this is a reasonable estimate
+        df['equivalent_diameter'] = (6 * df['volume'] / np.pi) ** (1/3)
+        df['sphericity_estimate'] = (np.pi ** (1/3) * (6 * df['volume']) ** (2/3)) / df['volume'] if voxel_size is None else None
     
     stats_dict = df.to_dict('list')
     
     # Calculate additional derived statistics
-    if 'area' in stats_dict:
-        areas = np.array(stats_dict['area'])
+    area_key = 'volume' if is_3d else 'area'
+    if area_key in stats_dict:
+        areas = np.array(stats_dict[area_key])
+        prefix = 'volume' if is_3d else 'area'
         stats_dict.update({
-            'total_area': float(np.sum(areas)),
-            'mean_area': float(np.mean(areas)),
-            'std_area': float(np.std(areas)),
-            'min_area': float(np.min(areas)),
-            'max_area': float(np.max(areas)),
-            'median_area': float(np.median(areas))
+            f'total_{prefix}': float(np.sum(areas)),
+            f'mean_{prefix}': float(np.mean(areas)),
+            f'std_{prefix}': float(np.std(areas)),
+            f'min_{prefix}': float(np.min(areas)),
+            f'max_{prefix}': float(np.max(areas)),
+            f'median_{prefix}': float(np.median(areas))
         })
     
     if 'mean_intensity' in stats_dict:
@@ -168,33 +260,79 @@ def _calculate_object_statistics_skimage(labeled_image, intensity_image=None, pr
     
     # Object count
     stats_dict['object_count'] = len(df)
+    stats_dict['ndim'] = ndim
+    stats_dict['is_3d'] = is_3d
+    if voxel_size is not None:
+        stats_dict['voxel_size'] = list(voxel_size)
     
     return stats_dict
 
-def _calculate_object_statistics_fallback(labels, intensity_image=None):
+def _calculate_object_statistics_fallback(labels, intensity_image=None, voxel_size=None):
     """Pure Python fallback for basic object measurements."""
-    unique_labels = set(pixel for row in labels for pixel in row if pixel > 0)
-    results = {'label': [], 'area': [], 'mean_intensity': []}
+    # Handle numpy arrays
+    if HAS_SCIENTIFIC_LIBS and isinstance(labels, np.ndarray):
+        unique_labels_arr = np.unique(labels)
+        unique_labels = set(int(x) for x in unique_labels_arr if x > 0)
+        is_3d = labels.ndim == 3
+    else:
+        # Pure Python: assume 2D nested list
+        unique_labels = set()
+        for row in labels:
+            if isinstance(row, (list, tuple)):
+                for pixel in row:
+                    if isinstance(pixel, (list, tuple)):
+                        # 3D case
+                        for val in pixel:
+                            if val > 0:
+                                unique_labels.add(val)
+                    elif pixel > 0:
+                        unique_labels.add(pixel)
+            elif row > 0:
+                unique_labels.add(row)
+        is_3d = False  # Assume 2D for pure Python fallback
     
+    area_key = 'volume' if is_3d else 'area'
+    results = {'label': [], area_key: [], 'mean_intensity': []}
+    
+    voxel_volume = float(np.prod(voxel_size)) if (voxel_size is not None and HAS_SCIENTIFIC_LIBS) else 1.0
+    if voxel_size is not None and not HAS_SCIENTIFIC_LIBS:
+        # Pure Python product
+        voxel_volume = 1.0
+        for v in voxel_size:
+            voxel_volume *= v
+
     for label_id in unique_labels:
         area = 0
         intensity_sum = 0
-        pixels = []
-        for r, row in enumerate(labels):
-            for c, pixel_label in enumerate(row):
-                if pixel_label == label_id:
-                    area += 1
-                    if intensity_image:
-                        intensity_sum += intensity_image[r][c]
+        
+        if HAS_SCIENTIFIC_LIBS and isinstance(labels, np.ndarray):
+            # Numpy-based counting
+            mask = labels == label_id
+            area = int(np.sum(mask))
+            if intensity_image is not None and isinstance(intensity_image, np.ndarray):
+                intensity_sum = float(np.sum(intensity_image[mask]))
+        else:
+            # Pure Python counting
+            for r, row in enumerate(labels):
+                for c, pixel_label in enumerate(row):
+                    if pixel_label == label_id:
+                        area += 1
+                        if intensity_image:
+                            intensity_sum += intensity_image[r][c]
         
         results['label'].append(label_id)
-        results['area'].append(area)
-        if intensity_image and area > 0:
+        # Apply voxel size scaling
+        results[area_key].append(area * voxel_volume)
+        if intensity_image is not None and area > 0:
             results['mean_intensity'].append(intensity_sum / area)
         else:
-             results['mean_intensity'].append(0)
+            results['mean_intensity'].append(0)
 
     results['object_count'] = len(unique_labels)
+    results['is_3d'] = is_3d
+    results['ndim'] = 3 if is_3d else 2
+    if voxel_size is not None:
+        results['voxel_size'] = list(voxel_size)
     return results
 
 def calculate_colocalization_coefficients(image1, image2, 

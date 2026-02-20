@@ -668,7 +668,7 @@ class Empanada_Segmentation:
     def segment_with_pretrained_model(self, image, model_type="mitochondria"):
         """Apply pre-trained deep learning models"""
         try:
-            # Simulate deep learning segmentation with advanced classical methods
+            # Approximate each pretrained model with deterministic classical methods
             if model_type == "mitochondria":
                 return self._segment_mitochondria_classical(image)
             elif model_type == "nucleus":

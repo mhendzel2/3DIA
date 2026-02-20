@@ -9,17 +9,19 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QGroupBox, QCheckBox, QTableWidget, QTableWidgetItem,
                              QTreeWidget, QTreeWidgetItem, QSplitter, QProgressBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-import napari
-from napari.layers import Image, Labels, Tracks, Points
+from napari.layers import Labels
 
 try:
     from scipy.spatial.distance import cdist
     from scipy.optimize import linear_sum_assignment
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_qt6agg import FigureCanvasQTAgg as FigureCanvas
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
+
+from pymaris.jobs import JobCancelledError, JobRunner
+from pymaris.workflow import WorkflowResult, WorkflowStep
+from pymaris_napari.provenance import record_ui_workflow_result
+from pymaris_napari.settings import load_project_store_settings, resolve_project_store_dir
 
 class TrackingThread(QThread):
     """Thread for time-consuming tracking operations"""
@@ -294,13 +296,27 @@ class TrackingThread(QThread):
 
 class AdvancedTrackingWidget(QWidget):
     """Widget for advanced cell tracking with lineage analysis"""
+    workflow_progress = pyqtSignal(int, str)
+    workflow_finished = pyqtSignal(object)
+    workflow_failed = pyqtSignal(str)
+    workflow_cancelled = pyqtSignal(str)
     
     def __init__(self, viewer):
         super().__init__()
         self.viewer = viewer
         self.current_results = None
         self.tracking_thread = None
+        self.job_runner = JobRunner(max_workers=2)
+        self.workflow_handle = None
+        self.workflow_step = None
+        self.last_workflow_result = None
+        self.project_store_settings = load_project_store_settings()
+        self.project_session_dir_cache = None
         self.init_ui()
+        self.workflow_progress.connect(self.on_workflow_progress)
+        self.workflow_finished.connect(self.on_workflow_finished)
+        self.workflow_failed.connect(self.on_workflow_error)
+        self.workflow_cancelled.connect(self.on_workflow_cancelled)
         
     def init_ui(self):
         """Initialize the user interface"""
@@ -387,6 +403,10 @@ class AdvancedTrackingWidget(QWidget):
         self.track_btn.clicked.connect(self.start_tracking)
         self.track_btn.setStyleSheet("font-weight: bold; padding: 10px;")
         main_layout.addWidget(self.track_btn)
+        self.cancel_btn = QPushButton("Cancel Tracking")
+        self.cancel_btn.clicked.connect(self.cancel_tracking)
+        self.cancel_btn.setEnabled(False)
+        main_layout.addWidget(self.cancel_btn)
         
         # Results splitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -450,6 +470,10 @@ class AdvancedTrackingWidget(QWidget):
     
     def start_tracking(self):
         """Start tracking process"""
+        if self.workflow_handle and not self.workflow_handle.done():
+            self.status_label.setText("Tracking already in progress")
+            return
+
         layer_name = self.layer_combo.currentText()
         if not layer_name:
             self.status_label.setText("No layer selected")
@@ -472,7 +496,7 @@ class AdvancedTrackingWidget(QWidget):
         if labels_data.ndim < 3:
             self.status_label.setText("Layer must be 3D or higher (time dimension required)")
             return
-        
+
         timepoints = [labels_data[t] for t in range(labels_data.shape[0])]
         
         # Prepare parameters
@@ -483,27 +507,154 @@ class AdvancedTrackingWidget(QWidget):
             'detect_divisions': self.detect_divisions_check.isChecked(),
             'detect_merges': self.detect_merges_check.isChecked()
         }
-        
-        # Start tracking thread
-        self.tracking_thread = TrackingThread(timepoints, parameters)
-        self.tracking_thread.progress.connect(self.update_progress)
-        self.tracking_thread.finished.connect(self.on_tracking_finished)
-        self.tracking_thread.error.connect(self.on_tracking_error)
-        
+
+        self.workflow_step = WorkflowStep(
+            id=f"tracking-{layer_name}-{self.max_distance_spin.value():.1f}",
+            name="tracking:hungarian",
+            backend_type="tracking",
+            backend_name="hungarian",
+            params=parameters,
+            inputs=["labels_sequence"],
+            outputs=["tracks"],
+        )
+        self.last_workflow_result = None
+
         self.track_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
         self.status_label.setText("Tracking objects...")
-        self.tracking_thread.start()
-    
-    def update_progress(self, value):
-        """Update progress bar"""
-        self.progress_bar.setValue(value)
+        self.status_label.setStyleSheet("color: #666; font-style: italic;")
+        self.progress_bar.setValue(0)
+
+        self.workflow_handle = self.job_runner.submit(
+            step=self.workflow_step,
+            context={"labels_sequence": timepoints},
+            on_progress=lambda p, m: self.workflow_progress.emit(p, m),
+        )
+        self.workflow_handle.future.add_done_callback(self._on_tracking_job_done)
+
+    def cancel_tracking(self):
+        """Cancel active tracking operation."""
+        if self.workflow_handle and not self.workflow_handle.done():
+            self.workflow_handle.cancel()
+        if self.tracking_thread and self.tracking_thread.isRunning():
+            self.tracking_thread.terminate()
+        self.cancel_btn.setEnabled(False)
+
+    def _on_tracking_job_done(self, future):
+        """Bridge workflow completion back to Qt thread signals."""
+        try:
+            result = future.result()
+            self.workflow_finished.emit(result)
+        except JobCancelledError as exc:
+            self.workflow_cancelled.emit(str(exc))
+        except Exception as exc:
+            self.workflow_failed.emit(str(exc))
+
+    def on_workflow_progress(self, value, _message):
+        """Update progress from workflow callbacks."""
+        self.progress_bar.setValue(int(value))
+
+    def on_workflow_finished(self, result):
+        """Handle tracking completion from workflow path."""
+        self.last_workflow_result = result if isinstance(result, WorkflowResult) else None
+        normalized = self._normalize_tracking_results(result)
+        self.on_tracking_finished(normalized)
+
+    def on_workflow_error(self, message):
+        """Handle workflow tracking errors."""
+        self.workflow_handle = None
+        self.workflow_step = None
+        self.cancel_btn.setEnabled(False)
+        self.on_tracking_error(message)
+
+    def on_workflow_cancelled(self, message):
+        """Handle workflow cancellation."""
+        self.workflow_handle = None
+        self.workflow_step = None
+        self.cancel_btn.setEnabled(False)
+        self.track_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
+        self.status_label.setText(message or "Tracking cancelled")
+        self.status_label.setStyleSheet("color: #666; font-style: italic;")
+
+    def _normalize_tracking_results(self, payload):
+        """Normalize workflow and legacy result payloads to existing widget shape."""
+        if isinstance(payload, WorkflowResult):
+            track_payload = payload.outputs.get("tracks", {})
+            tracks = track_payload.get("tracks", []) if isinstance(track_payload, dict) else []
+            detections = track_payload.get("detections", []) if isinstance(track_payload, dict) else []
+            stats_table = payload.tables.get("tracks_table", {})
+            statistics = self._compute_track_statistics(tracks)
+            if isinstance(stats_table, dict):
+                statistics.update({k: v for k, v in stats_table.items() if k not in statistics})
+            return {
+                "tracks": tracks,
+                "statistics": statistics,
+                "lineage_events": {"divisions": [], "merges": []},
+                "all_detections": detections,
+                "napari_tracks": track_payload.get("napari_tracks", np.empty((0, 4))),
+            }
+        if isinstance(payload, dict):
+            normalized = dict(payload)
+            normalized.setdefault("lineage_events", {"divisions": [], "merges": []})
+            normalized.setdefault("statistics", self._compute_track_statistics(normalized.get("tracks", [])))
+            return normalized
+        return {
+            "tracks": [],
+            "statistics": self._compute_track_statistics([]),
+            "lineage_events": {"divisions": [], "merges": []},
+            "all_detections": [],
+            "napari_tracks": np.empty((0, 4)),
+        }
+
+    def _compute_track_statistics(self, tracks):
+        """Compute rich per-track statistics for UI display."""
+        stats = {
+            "total_tracks": len(tracks),
+            "track_lengths": [],
+            "track_displacements": [],
+            "track_speeds": [],
+            "track_straightness": [],
+            "mean_track_length": 0.0,
+            "mean_displacement": 0.0,
+            "mean_speed": 0.0,
+            "mean_straightness": 0.0,
+        }
+        for track in tracks:
+            detections = track.get("detections", [])
+            length = len(detections)
+            stats["track_lengths"].append(length)
+            if length > 1:
+                start = np.asarray(detections[0]["position"], dtype=float)
+                end = np.asarray(detections[-1]["position"], dtype=float)
+                displacement = float(np.linalg.norm(end - start))
+                stats["track_displacements"].append(displacement)
+                path_length = 0.0
+                for index in range(1, length):
+                    a = np.asarray(detections[index - 1]["position"], dtype=float)
+                    b = np.asarray(detections[index]["position"], dtype=float)
+                    path_length += float(np.linalg.norm(b - a))
+                speed = path_length / float(length - 1)
+                stats["track_speeds"].append(speed)
+                stats["track_straightness"].append(displacement / path_length if path_length > 0 else 0.0)
+        for key, target in (
+            ("track_lengths", "mean_track_length"),
+            ("track_displacements", "mean_displacement"),
+            ("track_speeds", "mean_speed"),
+            ("track_straightness", "mean_straightness"),
+        ):
+            values = stats[key]
+            stats[target] = float(np.mean(values)) if values else 0.0
+        return stats
     
     def on_tracking_finished(self, results):
         """Handle successful tracking completion"""
         self.current_results = results
         self.track_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
         self.export_tracks_btn.setEnabled(True)
         self.export_lineage_btn.setEnabled(True)
+        self.workflow_handle = None
         
         # Display statistics
         stats = results['statistics']
@@ -528,6 +679,9 @@ class AdvancedTrackingWidget(QWidget):
         
         # Convert tracks to napari format and add to viewer
         self._add_tracks_to_viewer(results['tracks'])
+        self._record_tracking_provenance(results)
+        self.workflow_step = None
+        self.last_workflow_result = None
         
         self.status_label.setText(f"Tracking complete: {stats['total_tracks']} tracks found")
         self.status_label.setStyleSheet("color: green; font-style: italic;")
@@ -536,6 +690,10 @@ class AdvancedTrackingWidget(QWidget):
     def on_tracking_error(self, error_message):
         """Handle tracking errors"""
         self.track_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
+        self.workflow_handle = None
+        self.workflow_step = None
+        self.last_workflow_result = None
         self.status_label.setText(f"Error: {error_message}")
         self.status_label.setStyleSheet("color: red; font-style: italic;")
         self.progress_bar.setValue(0)
@@ -578,23 +736,29 @@ class AdvancedTrackingWidget(QWidget):
     
     def _add_tracks_to_viewer(self, tracks):
         """Convert tracks to napari format and add to viewer"""
-        # Convert to napari tracks format: [track_id, timepoint, y, x]
-        track_data = []
-        
-        for track in tracks:
-            track_id = track['track_id']
-            for det in track['detections']:
-                timepoint = det['timepoint']
-                pos = det['position']
-                if len(pos) == 2:
-                    track_data.append([track_id, timepoint, pos[0], pos[1]])
-                else:
-                    # 3D data - use middle slice
-                    track_data.append([track_id, timepoint, pos[1], pos[2]])
-        
-        if track_data:
-            track_data = np.array(track_data)
-            
+        track_data = None
+        if isinstance(self.current_results, dict):
+            napari_tracks = self.current_results.get("napari_tracks")
+            if isinstance(napari_tracks, np.ndarray) and napari_tracks.size > 0:
+                track_data = napari_tracks
+
+        if track_data is None:
+            # Convert to napari tracks format: [track_id, timepoint, y, x]
+            rows = []
+            for track in tracks:
+                track_id = track['track_id']
+                for det in track['detections']:
+                    timepoint = det['timepoint']
+                    pos = det['position']
+                    if len(pos) == 2:
+                        rows.append([track_id, timepoint, pos[0], pos[1]])
+                    else:
+                        # 3D data - use middle slice
+                        rows.append([track_id, timepoint, pos[1], pos[2]])
+            if rows:
+                track_data = np.asarray(rows)
+
+        if track_data is not None and track_data.size > 0:
             track_layer_name = f"Tracks_{self.layer_combo.currentText()}"
             if track_layer_name in [l.name for l in self.viewer.layers]:
                 for layer in self.viewer.layers:
@@ -605,43 +769,123 @@ class AdvancedTrackingWidget(QWidget):
                 self.viewer.add_tracks(track_data, name=track_layer_name)
     
     def export_tracks(self):
-        """Export tracks to CSV"""
+        """Export tracks to CSV or TrackMate XML."""
         if self.current_results is None:
             return
         
         from PyQt6.QtWidgets import QFileDialog
         import csv
         
-        filename, _ = QFileDialog.getSaveFileName(
+        filename, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Export Tracks",
             "",
-            "CSV Files (*.csv);;All Files (*)"
+            "CSV Files (*.csv);;TrackMate XML (*.xml);;All Files (*)"
         )
         
         if filename:
             try:
-                with open(filename, 'w', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["Track_ID", "Timepoint", "Y", "X", "Area"])
-                    
-                    for track in self.current_results['tracks']:
-                        track_id = track['track_id']
-                        for det in track['detections']:
-                            pos = det['position']
-                            writer.writerow([
-                                track_id,
-                                det['timepoint'],
-                                pos[0] if len(pos) > 0 else 0,
-                                pos[1] if len(pos) > 1 else 0,
-                                det.get('area', 0)
-                            ])
+                wants_xml = "TrackMate XML" in selected_filter or filename.lower().endswith(".xml")
+                if wants_xml:
+                    if not filename.lower().endswith(".xml"):
+                        filename = f"{filename}.xml"
+                    xml_content = self._build_trackmate_xml(self.current_results.get("tracks", []))
+                    with open(filename, "w", encoding="utf-8") as handle:
+                        handle.write(xml_content)
+                else:
+                    with open(filename, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(["Track_ID", "Timepoint", "Y", "X", "Area"])
+                        
+                        for track in self.current_results['tracks']:
+                            track_id = track['track_id']
+                            for det in track['detections']:
+                                pos = det['position']
+                                writer.writerow([
+                                    track_id,
+                                    det['timepoint'],
+                                    pos[0] if len(pos) > 0 else 0,
+                                    pos[1] if len(pos) > 1 else 0,
+                                    det.get('area', 0)
+                                ])
                 
                 self.status_label.setText(f"Tracks exported to {filename}")
                 self.status_label.setStyleSheet("color: green; font-style: italic;")
             except Exception as e:
                 self.status_label.setText(f"Export failed: {str(e)}")
                 self.status_label.setStyleSheet("color: red; font-style: italic;")
+
+    def _build_trackmate_xml(self, tracks):
+        """Serialize track detections into a minimal TrackMate-compatible XML document."""
+        import xml.etree.ElementTree as ET
+
+        model = ET.Element("TrackMate")
+        trackmate_model = ET.SubElement(model, "Model", {"spatialunits": "pixel", "timeunits": "frame"})
+        all_spots = ET.SubElement(trackmate_model, "AllSpots")
+        all_tracks = ET.SubElement(trackmate_model, "AllTracks")
+        filtered_tracks = ET.SubElement(trackmate_model, "FilteredTracks")
+
+        spot_id = 0
+        spot_ids_by_track: dict[int, list[int]] = {}
+
+        for track in tracks:
+            track_id = int(track.get("track_id", 0))
+            spot_ids: list[int] = []
+            for det in track.get("detections", []):
+                pos = det.get("position", ())
+                x_value = float(pos[1]) if len(pos) > 1 else float(pos[0]) if len(pos) > 0 else 0.0
+                y_value = float(pos[0]) if len(pos) > 0 else 0.0
+                z_value = float(pos[2]) if len(pos) > 2 else 0.0
+                frame_value = int(det.get("timepoint", 0))
+                ET.SubElement(
+                    all_spots,
+                    "Spot",
+                    {
+                        "ID": str(spot_id),
+                        "FRAME": str(frame_value),
+                        "POSITION_T": str(frame_value),
+                        "POSITION_X": str(x_value),
+                        "POSITION_Y": str(y_value),
+                        "POSITION_Z": str(z_value),
+                        "RADIUS": "1.0",
+                        "QUALITY": "1.0",
+                        "AREA": str(float(det.get("area", 0.0))),
+                    },
+                )
+                spot_ids.append(spot_id)
+                spot_id += 1
+            spot_ids_by_track[track_id] = spot_ids
+
+        for track in tracks:
+            track_id = int(track.get("track_id", 0))
+            xml_track = ET.SubElement(
+                all_tracks,
+                "Track",
+                {
+                    "TRACK_ID": str(track_id),
+                    "NUMBER_SPOTS": str(len(track.get("detections", []))),
+                    "TRACK_INDEX": str(track_id),
+                },
+            )
+            ids = spot_ids_by_track.get(track_id, [])
+            for source_id, target_id in zip(ids, ids[1:]):
+                ET.SubElement(
+                    xml_track,
+                    "Edge",
+                    {
+                        "SPOT_SOURCE_ID": str(source_id),
+                        "SPOT_TARGET_ID": str(target_id),
+                        "LINK_COST": "0.0",
+                        "VELOCITY": "0.0",
+                        "DISPLACEMENT": "0.0",
+                    },
+                )
+            ET.SubElement(filtered_tracks, "TrackID", {"TRACK_ID": str(track_id)})
+
+        settings = ET.SubElement(model, "Settings")
+        ET.SubElement(settings, "ImageData", {"filename": "pymaris_export", "folder": "."})
+        ET.SubElement(model, "GUIState")
+        return ET.tostring(model, encoding="unicode")
     
     def export_lineage(self):
         """Export lineage information"""
@@ -681,3 +925,48 @@ class AdvancedTrackingWidget(QWidget):
             except Exception as e:
                 self.status_label.setText(f"Export failed: {str(e)}")
                 self.status_label.setStyleSheet("color: red; font-style: italic;")
+
+    def _resolve_project_store_dir(self):
+        """Resolve project store location using global napari settings."""
+        self.project_store_settings = load_project_store_settings()
+        naming = str(self.project_store_settings.get("session_naming", "timestamp"))
+        if naming == "timestamp":
+            resolved = resolve_project_store_dir(
+                self.project_store_settings,
+                session_dir_cache=self.project_session_dir_cache,
+            )
+            if self.project_session_dir_cache is None:
+                self.project_session_dir_cache = resolved
+            return resolved
+        return resolve_project_store_dir(self.project_store_settings)
+
+    def _record_tracking_provenance(self, normalized_results):
+        """Persist tracking run metadata and outputs to ProjectStore."""
+        if not self.workflow_step or not self.last_workflow_result:
+            return
+        try:
+            current_layer_name = self.layer_combo.currentText()
+            source_paths = []
+            for layer in self.viewer.layers:
+                if layer.name == current_layer_name:
+                    source_path = getattr(layer, "metadata", {}).get("source_path")
+                    if source_path:
+                        source_paths.append(str(source_path))
+                    break
+            project_dir = self._resolve_project_store_dir()
+            record_ui_workflow_result(
+                project_dir=project_dir,
+                step=self.workflow_step,
+                result=self.last_workflow_result,
+                source_paths=source_paths,
+            )
+        except Exception as exc:
+            self.status_label.setText(f"Provenance warning: {exc}")
+            self.status_label.setStyleSheet("color: #a67c00; font-style: italic;")
+
+    def closeEvent(self, event):
+        """Shutdown background workers when widget closes."""
+        if self.workflow_handle and not self.workflow_handle.done():
+            self.workflow_handle.cancel()
+        self.job_runner.shutdown(wait=False)
+        super().closeEvent(event)

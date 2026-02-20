@@ -46,7 +46,16 @@ opencv-python>=4.7.0
 numpydoc>=1.9.0
 ome-types>=0.6.2
 ome-zarr>=0.10.2
-console>=0.1.4
 
-# Development package (install from current directory)
--e .
+# Additional Analysis
+scikit-learn>=1.0.0
+
+# File Format Support (Optional)
+# readlif>=0.6.0       # Leica LIF files
+# nd2reader>=3.2.0     # Nikon ND2 files
+# czifile>=2019.0.0    # Zeiss CZI files
+
+# Development Tools (Optional)
+# pytest>=6.0.0
+# black>=21.0.0
+# flake8>=3.9.0

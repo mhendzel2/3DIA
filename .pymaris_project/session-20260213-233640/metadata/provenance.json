@@ -1,0 +1,73 @@
+{
+  "created_at": "2026-02-14T06:36:40.685735+00:00",
+  "environment": {
+    "captured_at": "2026-02-14T06:36:40.713342+00:00",
+    "packages": {
+      "dask": "2026.1.2",
+      "napari": "0.6.6",
+      "numpy": "2.4.2",
+      "scientific-image-analyzer": "1.1.0",
+      "scikit-image": "0.26.0",
+      "scipy": "1.17.0",
+      "tifffile": "2026.1.28"
+    },
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python_version": "3.12.3"
+  },
+  "inputs": [],
+  "outputs": [
+    {
+      "created_at": "2026-02-14T06:36:40.766077+00:00",
+      "kind": "image",
+      "metadata": {
+        "axes": [
+          "Y",
+          "X"
+        ],
+        "axis_units": {},
+        "channel_names": [],
+        "modality": null,
+        "pixel_size": {},
+        "source_metadata": {
+          "name": "test_image"
+        },
+        "time_spacing": null
+      },
+      "name": "richardson_lucy_deconvolved",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260213-233640/outputs/images/richardson_lucy_deconvolved.tif",
+      "sha256_head": "3baeb47a7284a2ff5107dc93eef2fd0387bdc169382fbfd299058279dc91e8e9",
+      "size_bytes": 80272
+    },
+    {
+      "created_at": "2026-02-14T06:36:40.823693+00:00",
+      "kind": "table",
+      "metadata": {
+        "columns": [],
+        "rows": 1
+      },
+      "name": "richardson_lucy_deconvolved_table",
+      "path": "/mnt/c/Users/mjhen/Github/3DIA/.pymaris_project/session-20260213-233640/outputs/tables/richardson_lucy_deconvolved_table.csv",
+      "sha256_head": "dba5166ad9db9ba648c1032ebbd34dcd0d085b50023b839ef5c68ca1db93a563",
+      "size_bytes": 4
+    }
+  ],
+  "schema_version": "0.2.0",
+  "workflow_steps": [
+    {
+      "created_at": "2026-02-14T06:36:40.870064+00:00",
+      "id": "step-0001",
+      "inputs": [
+        "image"
+      ],
+      "name": "restoration:richardson_lucy",
+      "outputs": [
+        "richardson_lucy_deconvolved"
+      ],
+      "params": {
+        "iterations": 10,
+        "method": "richardson_lucy",
+        "operation": "deconvolve"
+      }
+    }
+  ]
+}

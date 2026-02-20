@@ -9877,3 +9877,6 @@ src/utils/__pycache__/analysis_utils.cpython-313.pyc
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github\instructions\snyk_rules.instructions.md
+
+# Snyk Security Extension - AI Rules (auto-generated)
+.github/instructions/snyk_rules.instructions.md

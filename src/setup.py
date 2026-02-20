@@ -55,7 +55,7 @@ setup(
     ],
     entry_points={
         'napari.manifest': [
-            'scientific-image-analyzer = napari.yaml',
+            'scientific-image-analyzer = pymaris_napari:napari.yaml',
         ],
     },
 )

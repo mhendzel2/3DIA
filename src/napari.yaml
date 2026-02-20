@@ -6,8 +6,34 @@ description: Multi-dimensional microscopy image analysis suite
 license: MIT
 
 contributions:
+  commands:
+    - id: scientific-image-analyzer.file_io_widget
+      title: File I/O
+      python_name: pymaris_napari._widgets:file_io_widget
+    - id: scientific-image-analyzer.processing_widget
+      title: Image Processing
+      python_name: pymaris_napari._widgets:processing_widget
+    - id: scientific-image-analyzer.segmentation_widget
+      title: Segmentation
+      python_name: pymaris_napari._widgets:segmentation_widget
+    - id: scientific-image-analyzer.analysis_widget
+      title: Analysis
+      python_name: pymaris_napari._widgets:analysis_widget
+    - id: scientific-image-analyzer.visualization_widget
+      title: 3D Visualization
+      python_name: pymaris_napari._widgets:visualization_widget
+    - id: widgets.spots_detection_widget.spots_detection_widget
+      title: Spots Detection Wizard
+      python_name: widgets.spots_detection_widget:spots_detection_widget
+    - id: file_io_napari.get_reader
+      title: Read microscopy files
+      python_name: file_io_napari:get_reader
+    - id: file_io_napari.write_tiff
+      title: Write TIFF
+      python_name: file_io_napari:write_tiff
+
   readers:
-    - command: file_io_napari:get_reader
+    - command: file_io_napari.get_reader
       filename_patterns: 
         - '*.czi'
         - '*.lif'
@@ -21,7 +47,7 @@ contributions:
       accepts_directories: false
 
   writers:
-    - command: file_io_napari:write_tiff
+    - command: file_io_napari.write_tiff
       layer_types: ['image']
       filename_extensions: ['.tif', '.tiff']
 
@@ -36,3 +62,5 @@ contributions:
       display_name: Analysis
     - command: scientific-image-analyzer.visualization_widget
       display_name: 3D Visualization
+    - command: widgets.spots_detection_widget.spots_detection_widget
+      display_name: Spots Detection Wizard

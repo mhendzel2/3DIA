@@ -1,10 +1,13 @@
 import numpy as np
-import napari
 import pytest
-from PyQt6.QtWidgets import QApplication
 
-from src.widgets.deconvolution_widget import DeconvolutionWidget
-from src.widgets.statistics_widget import StatisticsWidget
+try:
+    import napari
+    from PyQt6.QtWidgets import QApplication
+    from src.widgets.deconvolution_widget import DeconvolutionWidget
+    from src.widgets.statistics_widget import StatisticsWidget
+except Exception as exc:  # pragma: no cover - environment dependent
+    pytest.skip(f"napari/PyQt6 unavailable: {exc}", allow_module_level=True)
 
 # We need a QApplication instance to run Qt-based widgets
 @pytest.fixture(scope="session")
@@ -23,14 +26,19 @@ def test_deconvolution_widget(qt_application):
     # Create a dummy image
     image = np.random.rand(100, 100)
     viewer.add_image(image, name="test_image")
+    widget.update_layer_combo()
+    qt_application.processEvents()
 
     # Select the image in the widget
     widget.layer_combo.setCurrentText("test_image")
+    assert widget.layer_combo.currentText() == "test_image"
 
     # Test Richardson-Lucy
     widget.algo_combo.setCurrentText("richardson_lucy")
     widget.run_deconvolution()
-    widget.thread.wait()  # Wait for the thread to finish
+    assert widget.workflow_handle is not None
+    result = widget.workflow_handle.result(timeout=60)
+    widget.on_workflow_finished(result)
 
     # Check if a new layer was added
     assert len(viewer.layers) == 2
@@ -39,7 +47,9 @@ def test_deconvolution_widget(qt_application):
     # Test Wiener
     widget.algo_combo.setCurrentText("wiener")
     widget.run_deconvolution()
-    widget.thread.wait()
+    assert widget.workflow_handle is not None
+    result = widget.workflow_handle.result(timeout=60)
+    widget.on_workflow_finished(result)
 
     assert len(viewer.layers) == 3
     assert "wiener_deconvolved" in [layer.name for layer in viewer.layers]

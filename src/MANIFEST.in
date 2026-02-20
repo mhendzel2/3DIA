@@ -1,1 +1,2 @@
 include napari.yaml
+recursive-include pymaris_napari *.yaml

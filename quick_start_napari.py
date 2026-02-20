@@ -26,11 +26,10 @@ def ensure_napari_installed():
             return False
 
 def install_package():
-    """Install the scientific-image-analyzer package from the src directory."""
+    """Install the package with napari extras from the repository root."""
     print("Installing PyMaris Scientific Image Analyzer package...")
     try:
-        # We use -e to install in editable mode, pointing to the src directory.
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", "src"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", ".[napari]"])
         print("✓ Package installed successfully.")
         return True
     except subprocess.CalledProcessError as e:
