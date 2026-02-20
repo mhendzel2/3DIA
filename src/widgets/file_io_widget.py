@@ -16,7 +16,8 @@ from napari.layers import Image
 try:
     from aicsimageio import AICSImage
     HAS_AICSIMAGEIO = True
-except ImportError:
+except (ImportError, AttributeError):
+    # AttributeError can occur due to tifffile/aicsimageio version incompatibility
     HAS_AICSIMAGEIO = False
     print("Warning: aicsimageio not available. Limited file format support.")
 

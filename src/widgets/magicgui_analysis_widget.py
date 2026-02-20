@@ -8,8 +8,8 @@ from napari.layers import Image
 import numpy as np
 
 # Import functions from other modules
-from src.simple_analyzer import SimpleImageAnalyzer
-from src.advanced_analysis import AdvancedSegmentation
+from simple_analyzer import SimpleImageAnalyzer
+from advanced_analysis import AdvancedSegmentation
 
 @magicgui(call_button="Run Threshold")
 def simple_threshold_widget(image: Image, threshold: int = 128) -> napari.types.LabelsData:
