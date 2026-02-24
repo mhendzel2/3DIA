@@ -21,10 +21,14 @@ echo.
 echo To configure widgets:
 echo   1. Use the Widget Manager dock widget
 echo   2. Or edit config/widget_config.json
+echo Optional launch flags:
+echo   --workspace tracking
+echo   --workspace high_content_screening
+echo   --workspace viz_3d_quant
 echo.
 
 REM Activate venv and run
 call venv\Scripts\activate.bat
-python src\main_napari_configurable.py
+python src\main_napari_configurable.py %*
 
 pause

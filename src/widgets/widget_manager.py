@@ -122,11 +122,13 @@ class WidgetManagerWidget(QWidget):
         self.loaded_widgets = {}
         self.checkboxes = {}
         self.area_combos = {}
+        self.workspace_combo = None
         self.session_value_label = None
         self.session_value_edit = None
         self.session_naming_combo = None
         self.project_base_edit = None
         self.provenance_enabled_check = None
+        self.current_workspaces = {}
         self.init_ui()
         self.load_config()
 
@@ -145,6 +147,17 @@ class WidgetManagerWidget(QWidget):
         )
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
+
+        workspace_group = QGroupBox("Workspace Preset")
+        workspace_layout = QHBoxLayout()
+        self.workspace_combo = QComboBox()
+        workspace_layout.addWidget(QLabel("Preset:"))
+        workspace_layout.addWidget(self.workspace_combo)
+        apply_workspace_btn = QPushButton("Apply Preset")
+        apply_workspace_btn.clicked.connect(self.apply_selected_workspace)
+        workspace_layout.addWidget(apply_workspace_btn)
+        workspace_group.setLayout(workspace_layout)
+        layout.addWidget(workspace_group)
 
         # Scroll area for widgets
         scroll = QScrollArea()
@@ -240,10 +253,26 @@ class WidgetManagerWidget(QWidget):
         """Load configuration from file"""
         try:
             config = load_widget_config()
+            workspaces = config.get("workspaces", {})
+            if not isinstance(workspaces, dict) or not workspaces:
+                workspaces = dict(DEFAULT_CONFIG.get("workspaces", {}))
+            self.current_workspaces = workspaces
+            active_workspace = str(config.get("active_workspace", "default"))
+            self._populate_workspace_combo(active_workspace)
+
             enabled = dict(DEFAULT_CONFIG.get("enabled_widgets", {}))
             enabled.update(config.get("enabled_widgets", {}))
             areas = dict(DEFAULT_CONFIG.get("widget_areas", {}))
             areas.update(config.get("widget_areas", {}))
+
+            selected_workspace = self.current_workspaces.get(active_workspace)
+            if isinstance(selected_workspace, dict):
+                workspace_enabled = selected_workspace.get("enabled_widgets", {})
+                workspace_areas = selected_workspace.get("widget_areas", {})
+                if isinstance(workspace_enabled, dict):
+                    enabled.update(workspace_enabled)
+                if isinstance(workspace_areas, dict):
+                    areas.update(workspace_areas)
 
             for widget_id in self.checkboxes.keys():
                 if widget_id in enabled:
@@ -257,6 +286,47 @@ class WidgetManagerWidget(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Load Error", f"Could not load config: {e}")
 
+    def _populate_workspace_combo(self, active_workspace):
+        """Populate workspace preset combo and select active workspace."""
+        if self.workspace_combo is None:
+            return
+        self.workspace_combo.blockSignals(True)
+        self.workspace_combo.clear()
+        workspace_names = sorted(self.current_workspaces.keys())
+        if not workspace_names:
+            workspace_names = ["default"]
+        self.workspace_combo.addItems(workspace_names)
+        index = self.workspace_combo.findText(active_workspace)
+        if index < 0:
+            index = self.workspace_combo.findText("default")
+        if index >= 0:
+            self.workspace_combo.setCurrentIndex(index)
+        self.workspace_combo.blockSignals(False)
+
+    def apply_selected_workspace(self):
+        """Apply the selected workspace preset to checkboxes and areas."""
+        if self.workspace_combo is None:
+            return
+        selected = self.workspace_combo.currentText().strip()
+        if not selected:
+            return
+        workspace = self.current_workspaces.get(selected)
+        if not isinstance(workspace, dict):
+            QMessageBox.warning(self, "Workspace Missing", f"Workspace '{selected}' not found.")
+            return
+
+        enabled = dict(DEFAULT_CONFIG.get("enabled_widgets", {}))
+        enabled.update(workspace.get("enabled_widgets", {}))
+        areas = dict(DEFAULT_CONFIG.get("widget_areas", {}))
+        areas.update(workspace.get("widget_areas", {}))
+
+        for widget_id in self.checkboxes.keys():
+            self.checkboxes[widget_id].setChecked(bool(enabled.get(widget_id, False)))
+            area_value = str(areas.get(widget_id, "left"))
+            index = self.area_combos[widget_id].findText(area_value)
+            if index >= 0:
+                self.area_combos[widget_id].setCurrentIndex(index)
+
     def save_config(self):
         """Save configuration to file"""
         try:
@@ -265,10 +335,24 @@ class WidgetManagerWidget(QWidget):
             config["widget_areas"] = {}
             config["load_on_startup"] = bool(config.get("load_on_startup", True))
             config["show_welcome_message"] = bool(config.get("show_welcome_message", True))
+            if not isinstance(config.get("workspaces"), dict):
+                config["workspaces"] = dict(DEFAULT_CONFIG.get("workspaces", {}))
+
+            if self.workspace_combo is None:
+                selected_workspace = "default"
+            else:
+                selected_workspace = self.workspace_combo.currentText().strip() or "default"
+            config["active_workspace"] = selected_workspace
 
             for widget_id, checkbox in self.checkboxes.items():
                 config["enabled_widgets"][widget_id] = checkbox.isChecked()
                 config["widget_areas"][widget_id] = self.area_combos[widget_id].currentText()
+
+            workspace_payload = dict(config["workspaces"].get(selected_workspace, {}))
+            workspace_payload["enabled_widgets"] = dict(config["enabled_widgets"])
+            workspace_payload["widget_areas"] = dict(config["widget_areas"])
+            config["workspaces"][selected_workspace] = workspace_payload
+
             config["project_store"] = self._collect_project_store_settings()
             save_widget_config(config)
 
@@ -294,6 +378,10 @@ class WidgetManagerWidget(QWidget):
                     self.area_combos[widget_id].setCurrentIndex(index)
 
         self._apply_project_store_settings(DEFAULT_PROJECT_STORE_SETTINGS)
+        if self.workspace_combo is not None:
+            index = self.workspace_combo.findText("default")
+            if index >= 0:
+                self.workspace_combo.setCurrentIndex(index)
 
         QMessageBox.information(self, "Reset Complete", "Configuration reset to defaults")
 

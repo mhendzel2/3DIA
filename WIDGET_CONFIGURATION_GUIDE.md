@@ -6,12 +6,25 @@ PyMaris now supports configurable widget loading, allowing you to:
 - Load widgets on-demand during runtime
 - Reduce memory usage and startup time
 - Customize widget dock areas
+- Select pre-configured workspace presets (tracking, HCS, 3D quant)
 
 ## Quick Start
 
 ### Using Configurable Mode
 ```batch
 run_configurable.bat
+```
+
+### Launch Directly Into a Preset
+```batch
+run_configurable.bat --workspace tracking
+run_configurable.bat --workspace high_content_screening
+run_configurable.bat --workspace viz_3d_quant
+```
+
+List available preset names:
+```batch
+run_configurable.bat --list-workspaces
 ```
 
 This launches PyMaris with widget configuration enabled.
@@ -21,17 +34,29 @@ This launches PyMaris with widget configuration enabled.
 ### Method 1: Widget Manager GUI (Recommended)
 1. Launch PyMaris with `run_configurable.bat`
 2. Open the **Widget Manager** dock widget (right side by default)
-3. Check/uncheck widgets to enable/disable
-4. Select dock area (left/right/top/bottom) for each widget
-5. Click **Load Now** to load a widget immediately
-6. Click **Save Configuration** to save for next startup
-7. Restart PyMaris for changes to take effect
+3. Choose a **Workspace Preset** and click **Apply Preset**
+4. Check/uncheck widgets to fine-tune enable/disable settings
+5. Select dock area (left/right/top/bottom) for each widget
+6. Click **Load Now** to load a widget immediately
+7. Click **Save Configuration** to save for next startup
+8. Restart PyMaris for changes to take effect
 
 ### Method 2: Edit Configuration File
 Edit `config/widget_config.json` directly:
 
 ```json
 {
+    "active_workspace": "tracking",
+    "workspaces": {
+        "default": {
+            "enabled_widgets": { "file_io": true, "processing": true, "segmentation": true },
+            "widget_areas": { "file_io": "left", "processing": "left", "segmentation": "left" }
+        },
+        "tracking": {
+            "enabled_widgets": { "tracking": true, "distance_tools": true, "hca": false },
+            "widget_areas": { "tracking": "right", "distance_tools": "right" }
+        }
+    },
     "enabled_widgets": {
         "file_io": true,
         "processing": true,
@@ -55,6 +80,19 @@ Edit `config/widget_config.json` directly:
     "show_welcome_message": true
 }
 ```
+
+## Built-in Workspace Presets
+
+These presets are available out of the box in `config/widget_config.json` and from the Widget Manager preset selector:
+
+| Preset | ID | Best For |
+|--------|----|----------|
+| Default | `default` | Balanced general-purpose microscopy workflow |
+| Tracking | `tracking` | Time-lapse tracking and lineage analysis |
+| High-Content Screening | `high_content_screening` | Multi-well plate analysis and batch processing |
+| 3D Visualization + Quant | `viz_3d_quant` | 3D rendering, quantification, and deconvolution |
+
+You can duplicate any preset under `workspaces` to create your own team-specific layouts.
 
 ## Available Widgets
 

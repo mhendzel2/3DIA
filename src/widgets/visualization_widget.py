@@ -121,10 +121,26 @@ class VisualizationWidget(QWidget):
         self.gamma_slider.setValue(int(layer.gamma * 100))
 
         # Update contrast limits
-        self.contrast_min.setRange(layer.data.min(), layer.data.max())
-        self.contrast_max.setRange(layer.data.min(), layer.data.max())
-        self.contrast_min.setValue(layer.contrast_limits[0])
-        self.contrast_max.setValue(layer.contrast_limits[1])
+        data_min = float(np.min(layer.data))
+        data_max = float(np.max(layer.data))
+        if data_max < data_min:
+            data_min, data_max = data_max, data_min
+        low, high = layer.contrast_limits
+        low = float(low)
+        high = float(high)
+        if high < low:
+            low, high = high, low
+
+        self.contrast_min.blockSignals(True)
+        self.contrast_max.blockSignals(True)
+        try:
+            self.contrast_min.setRange(data_min, data_max)
+            self.contrast_max.setRange(data_min, data_max)
+            self.contrast_min.setValue(low)
+            self.contrast_max.setValue(high)
+        finally:
+            self.contrast_min.blockSignals(False)
+            self.contrast_max.blockSignals(False)
 
     def on_rendering_change(self, value):
         layer = self.get_selected_layer()
@@ -149,4 +165,16 @@ class VisualizationWidget(QWidget):
     def on_contrast_change(self):
         layer = self.get_selected_layer()
         if layer:
-            layer.contrast_limits = (self.contrast_min.value(), self.contrast_max.value())
+            low = float(self.contrast_min.value())
+            high = float(self.contrast_max.value())
+            if high < low:
+                low, high = high, low
+                self.contrast_min.blockSignals(True)
+                self.contrast_max.blockSignals(True)
+                try:
+                    self.contrast_min.setValue(low)
+                    self.contrast_max.setValue(high)
+                finally:
+                    self.contrast_min.blockSignals(False)
+                    self.contrast_max.blockSignals(False)
+            layer.contrast_limits = (low, high)

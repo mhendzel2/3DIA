@@ -34,7 +34,7 @@ def get_reader(path):
     This function is called by Napari when a file is opened. It checks if
     the file format is supported and, if so, returns the actual reader function.
     """
-    if isinstance(path, str) and any(path.endswith(ext) for ext in ['.czi', '.lif', '.nd2', '.oib', '.tif', '.tiff']):
+    if isinstance(path, str) and any(path.endswith(ext) for ext in ['.czi', '.lif', '.nd2', '.oib', '.ims', '.tif', '.tiff']):
         return read_microscopy_file
     return None
 
@@ -111,7 +111,22 @@ def _infer_time_scale_from_aics(img):
 
 def read_with_tifffile(path):
     """Read using tifffile for TIFF images"""
-    data = tifffile.imread(path)
+    try:
+        data = tifffile.imread(path)
+    except Exception as exc:
+        message = str(exc).lower()
+        if 'imagecodecs' in message and 'lzw' in message:
+            try:
+                from PIL import Image as PILImage
+
+                with PILImage.open(path) as pil_image:
+                    data = np.asarray(pil_image)
+            except Exception as pil_exc:
+                raise RuntimeError(
+                    f"Failed to load {path}: TIFF uses LZW compression. Install `imagecodecs`."
+                ) from pil_exc
+        else:
+            raise
     
     # Handle different TIFF structures
     if data.ndim > 2:

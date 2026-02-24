@@ -237,14 +237,31 @@ class SmartFileLoader:
         """Load TIFF file with tifffile"""
         import tifffile
         
-        data = tifffile.imread(file_path)
+        reader_name = 'tifffile'
+        try:
+            data = tifffile.imread(file_path)
+        except Exception as exc:
+            message = str(exc).lower()
+            if 'imagecodecs' in message and 'lzw' in message and 'pillow' in available_readers:
+                from PIL import Image as PILImage
+
+                with PILImage.open(file_path) as pil_image:
+                    data = np.asarray(pil_image)
+                reader_name = 'pillow (LZW fallback)'
+            elif 'imagecodecs' in message and 'lzw' in message:
+                raise RuntimeError(
+                    f"Failed to load {file_path}: TIFF uses LZW compression. "
+                    "Install `imagecodecs` to enable decoding."
+                ) from exc
+            else:
+                raise
         
         metadata = {
             'name': file_path.stem,
             'file_path': str(file_path),
             'shape': data.shape,
             'dtype': data.dtype,
-            'reader': 'tifffile',
+            'reader': reader_name,
             'scale': [1.0] * data.ndim
         }
         

@@ -35,6 +35,7 @@ setup(
         'pandas>=1.5.0',
         'aicsimageio>=4.9.4',
         'tifffile>=2023.3.15',
+        'imagecodecs>=2023.7.10',
         'imageio>=2.25.0',
         'Pillow>=9.0.0',
         'h5py>=3.7.0',

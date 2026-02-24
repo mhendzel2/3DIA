@@ -125,3 +125,19 @@ def test_open_ims_scene_selection_and_scene_listing(tmp_path: Path, monkeypatch)
     assert loaded.metadata["scene"].endswith("TimePoint 1")
     assert loaded.axes in {("Z", "Y", "X"), ("C", "Z", "Y", "X")}
     assert loaded.pixel_size.get("X") == 1.0
+
+
+def test_open_ims_aics_failure_without_h5py_has_actionable_error(tmp_path: Path, monkeypatch) -> None:
+    ims_path = tmp_path / "synthetic.ims"
+    ims_path.write_bytes(b"not-a-real-ims")
+
+    monkeypatch.setattr(pymaris_io, "HAS_AICSIMAGEIO", True)
+    monkeypatch.setattr(pymaris_io, "HAS_H5PY", False)
+
+    def _raise_aics(*args: object, **kwargs: object) -> object:
+        raise ValueError("cannot find loader for this HDF5 file")
+
+    monkeypatch.setattr(pymaris_io, "_open_aics", _raise_aics)
+
+    with pytest.raises(RuntimeError, match="Install `h5py`"):
+        open_image(ims_path)

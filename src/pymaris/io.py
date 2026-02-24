@@ -79,6 +79,7 @@ def open_image(
         if scene is not None or scene_index is not None:
             raise ValueError("scene selection is not supported for TIFF inputs")
         return _open_tiff(source=source, axes=axes, prefer_lazy=prefer_lazy, chunks=chunks)
+    aics_error: Exception | None = None
     if suffix in SPECIALIZED_EXTENSIONS:
         if HAS_AICSIMAGEIO:
             try:
@@ -90,22 +91,36 @@ def open_image(
                     scene_index=scene_index,
                 )
             except Exception as exc:
-                if suffix == ".ims" and HAS_H5PY:
+                if suffix == ".ims":
+                    aics_error = exc
                     LOGGER.warning(
-                        "AICSImageIO failed to read %s (%s); falling back to h5py Imaris reader",
+                        "AICSImageIO failed to read %s (%s); trying h5py Imaris fallback",
                         source,
                         exc,
                     )
                 else:
                     raise
         if suffix == ".ims" and HAS_H5PY:
-            return _open_imaris_hdf5(
-                source=source,
-                axes=axes,
-                scene=scene,
-                scene_index=scene_index,
-            )
+            try:
+                return _open_imaris_hdf5(
+                    source=source,
+                    axes=axes,
+                    scene=scene,
+                    scene_index=scene_index,
+                )
+            except Exception as h5_exc:
+                if aics_error is not None:
+                    raise RuntimeError(
+                        f"failed to load {source}: AICSImageIO error ({aics_error}); "
+                        f"h5py Imaris fallback error ({h5_exc})"
+                    ) from h5_exc
+                raise
         if suffix == ".ims":
+            if aics_error is not None:
+                raise RuntimeError(
+                    f"failed to load {source}: AICSImageIO could not read this HDF5/Imaris file "
+                    f"({aics_error}). Install `h5py` for direct .ims fallback support."
+                ) from aics_error
             raise RuntimeError(
                 "Imaris .ims support requires `aicsimageio` or `h5py`; install with optional `.[io]` extras."
             )
