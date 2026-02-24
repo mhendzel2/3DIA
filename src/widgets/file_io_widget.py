@@ -81,9 +81,12 @@ except ImportError:
 # Optional advanced readers
 try:
     from aicsimageio import AICSImage
+    HAS_AICSIMAGEIO = True
     available_readers['aicsimageio'] = 'All microscopy formats'
-except ImportError:
-    pass
+except (ImportError, AttributeError):
+    # AttributeError can occur due to tifffile/aicsimageio version incompatibility
+    HAS_AICSIMAGEIO = False
+    print("Warning: aicsimageio not available. Limited file format support.")
 
 print(f"Available image readers: {', '.join(available_readers.keys())}")
 if not available_readers:

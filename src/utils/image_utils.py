@@ -20,7 +20,9 @@ SUPPORTED_FORMATS = [
 try:
     from aicsimageio import AICSImage
     HAS_AICSIMAGEIO = True
-except ImportError:
+except (ImportError, AttributeError):
+    # AttributeError can occur due to tifffile/aicsimageio version incompatibility
+    # (e.g., TIFF.RESUNIT removed in newer tifffile versions)
     HAS_AICSIMAGEIO = False
 
 try:

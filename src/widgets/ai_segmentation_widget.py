@@ -19,17 +19,17 @@ try:
     from stardist.models import StarDist2D
     from csbdeep.utils import normalize
     AI_MODELS_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError) as e:
     AI_MODELS_AVAILABLE = False
-    print("Warning: cellpose or stardist not installed. AI Segmentation widget will be disabled.")
+    print(f"Warning: cellpose or stardist not available. AI Segmentation widget will be disabled. ({type(e).__name__})")
 
 try:
     import torch
     from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
     SAM_MODELS_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError) as e:
     SAM_MODELS_AVAILABLE = False
-    print("Warning: segment-anything is not installed. SAM widget will be disabled.")
+    print(f"Warning: segment-anything is not available. SAM widget will be disabled. ({type(e).__name__})")
 
 def get_sam_checkpoint(model_type='vit_b'):
     if model_type == 'vit_b':

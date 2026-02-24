@@ -12,7 +12,8 @@ import numpy as np
 try:
     from aicsimageio import AICSImage
     AICSIMAGEIO_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
+    # AttributeError can occur due to tifffile/aicsimageio version incompatibility
     AICSIMAGEIO_AVAILABLE = False
 
 try:
