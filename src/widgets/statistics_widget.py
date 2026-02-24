@@ -169,7 +169,7 @@ class StatisticsWidget(QWidget):
         container.setLayout(layout)
         return container
 
-    def _label_layer_choices(self):
+    def _label_layer_choices(self, *_args, **_kwargs):
         return [layer.name for layer in self.viewer.layers if isinstance(layer, Labels)]
 
     def update_layer_combos(self):

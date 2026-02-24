@@ -19,8 +19,15 @@ from PyQt6.QtWidgets import QApplication
 
 import widgets.deconvolution_widget as deconv_module
 import widgets.filament_tracing_widget as filament_module
+from widgets.analysis_widget import AnalysisWidget
 from widgets.deconvolution_widget import DeconvolutionWidget
 from widgets.filament_tracing_widget import FilamentTracingWidget
+from widgets.spots_detection_widget import (
+    advanced_spatial_statistics_widget,
+    spots_detection_widget,
+)
+from widgets.statistics_widget import StatisticsWidget
+from widgets.tracking_widget import AdvancedTrackingWidget
 from widgets.widget_manager import WidgetManagerWidget
 
 
@@ -126,4 +133,21 @@ def test_widget_manager_project_store_panel_smoke(qapp: QApplication) -> None:
     assert settings["provenance_enabled"] is False
 
     widget.close()
+    qapp.processEvents()
+
+
+def test_updated_widgets_headless_smoke(qapp: QApplication) -> None:
+    """Smoke test for newly enhanced analysis/statistics/tracking/spots widgets."""
+    viewer = ViewerModel(title="updated-widgets-smoke")
+
+    analysis_widget = AnalysisWidget(viewer)
+    statistics_widget = StatisticsWidget(viewer)
+    tracking_widget = AdvancedTrackingWidget(viewer)
+
+    assert callable(spots_detection_widget)
+    assert callable(advanced_spatial_statistics_widget)
+
+    analysis_widget.close()
+    statistics_widget.close()
+    tracking_widget.close()
     qapp.processEvents()
