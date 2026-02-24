@@ -4,6 +4,7 @@ Uses format-specific readers with intelligent fallbacks
 """
 
 import os
+import re
 import numpy as np
 from pathlib import Path
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
@@ -808,11 +809,24 @@ class EnhancedFileIOWidget(QWidget):
         if len(scenes) <= 1:
             return {}
 
+        display_to_scene = {}
+        display_items = []
+        if extension == ".htd":
+            for scene in scenes:
+                display = self._format_htd_scene_label(str(scene))
+                display_to_scene[display] = str(scene)
+                display_items.append(display)
+        else:
+            for scene in scenes:
+                scene_text = str(scene)
+                display_to_scene[scene_text] = scene_text
+                display_items.append(scene_text)
+
         selected, ok = QInputDialog.getItem(
             self,
             "Select Scene",
             "This file contains multiple scenes:",
-            scenes,
+            display_items,
             0,
             False,
         )
@@ -820,7 +834,17 @@ class EnhancedFileIOWidget(QWidget):
             return None
         if not selected:
             return {}
-        return {"scene": str(selected)}
+        return {"scene": display_to_scene.get(str(selected), str(selected))}
+
+    @staticmethod
+    def _format_htd_scene_label(scene: str) -> str:
+        """Format HTD scene ids (e.g., A01_s01) for user-facing scene picker labels."""
+        match = re.match(r"^([A-P]\d{2})_s(\d+)$", scene, flags=re.IGNORECASE)
+        if not match:
+            return scene
+        well = match.group(1).upper()
+        site_num = int(match.group(2))
+        return f"{well} / Site {site_num:02d}"
         
     def load_image_series(self, directory):
         """Load image series from directory"""

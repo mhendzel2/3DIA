@@ -21,10 +21,12 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTabWidget, QTextEdit, QSplitter)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import napari
-from napari.layers import Image
+from napari.layers import Image, Labels
+from napari.qt.threading import thread_worker
 
 from scipy.stats import pearsonr, spearmanr
 from skimage import measure
+from pymaris.measurements import compute_mesh_morphometrics
 from utils.analysis_utils import (calculate_colocalization_coefficients, 
                                  costes_threshold, manders_coefficients)
 
@@ -236,6 +238,7 @@ class AnalysisWidget(QWidget):
         super().__init__()
         self.viewer = viewer
         self.analysis_thread = None
+        self.surface_worker = None
         self.current_results = {}
         self.init_ui()
         
@@ -347,6 +350,15 @@ class AnalysisWidget(QWidget):
         coeff_layout.addWidget(self.overlap_check)
 
         options_layout.addLayout(coeff_layout)
+
+        # Advanced mesh curvature mapping
+        advanced_layout = QHBoxLayout()
+        self.advanced_surface_check = QCheckBox("Calculate Advanced Surface Curvatures")
+        advanced_layout.addWidget(self.advanced_surface_check)
+        advanced_layout.addWidget(QLabel("Labels:"))
+        self.curvature_labels_combo = QComboBox()
+        advanced_layout.addWidget(self.curvature_labels_combo)
+        options_layout.addLayout(advanced_layout)
 
         options_group.setLayout(options_layout)
         controls_layout.addWidget(options_group)
@@ -489,6 +501,9 @@ class AnalysisWidget(QWidget):
             
             # Enable export
             self.export_analysis_btn.setEnabled(True)
+
+            if self.advanced_surface_check.isChecked():
+                self.calculate_advanced_surface_curvatures()
             
             print("Colocalization analysis completed")
             
@@ -692,6 +707,76 @@ class AnalysisWidget(QWidget):
                     combo.addItem(layer.name)
             else:
                 combo.addItem("No layers available")
+
+        if hasattr(self, "curvature_labels_combo"):
+            self.curvature_labels_combo.clear()
+            label_layers = [layer for layer in self.viewer.layers if isinstance(layer, Labels)]
+            if label_layers:
+                for layer in label_layers:
+                    self.curvature_labels_combo.addItem(layer.name)
+            else:
+                self.curvature_labels_combo.addItem("No labels available")
+
+    def calculate_advanced_surface_curvatures(self):
+        """Compute label-surface curvatures and map Gaussian values to napari Surface layers."""
+        label_layer_name = self.curvature_labels_combo.currentText()
+        if not label_layer_name or label_layer_name == "No labels available":
+            self.show_error("Select a valid Labels layer for surface curvature analysis")
+            return
+
+        labels_layer = None
+        for layer in self.viewer.layers:
+            if layer.name == label_layer_name and isinstance(layer, Labels):
+                labels_layer = layer
+                break
+
+        if labels_layer is None:
+            self.show_error("Selected labels layer is unavailable")
+            return
+
+        spacing = tuple(float(v) for v in np.asarray(getattr(labels_layer, "scale", (1.0, 1.0, 1.0)))[-3:])
+        labels_data = np.asarray(labels_layer.data)
+
+        @thread_worker
+        def _worker():
+            return compute_mesh_morphometrics(
+                labels_data,
+                voxel_spacing=spacing,
+                return_vertex_data=True,
+            )
+
+        self.surface_worker = _worker()
+        self.surface_worker.returned.connect(
+            lambda frame: self._add_curvature_surfaces_to_viewer(frame, label_layer_name)
+        )
+        self.surface_worker.errored.connect(
+            lambda exc: self.show_error(
+                f"Advanced surface curvature failed: {exc}. Install with: pip install pymaris[advanced]"
+            )
+        )
+        self.surface_worker.start()
+
+    def _add_curvature_surfaces_to_viewer(self, dataframe, source_layer_name: str):
+        """Add per-label napari Surface layers colored by Gaussian curvature."""
+        if dataframe is None or dataframe.empty:
+            return
+
+        for _, row in dataframe.iterrows():
+            label_id = int(row.get("label", 0))
+            vertices = row.get("mesh_vertices")
+            faces = row.get("mesh_faces")
+            values = row.get("gaussian_curvature_vertices")
+            if vertices is None or faces is None or values is None:
+                continue
+
+            layer_name = f"{source_layer_name}_Label{label_id}_GaussianCurvature"
+            surface_data = (np.asarray(vertices), np.asarray(faces), np.asarray(values, dtype=float))
+            existing = [layer for layer in self.viewer.layers if layer.name == layer_name]
+            if existing:
+                existing[0].data = surface_data
+                existing[0].colormap = "coolwarm"
+            else:
+                self.viewer.add_surface(surface_data, name=layer_name, colormap="coolwarm")
                 
     def show_error(self, message):
         """Display error message"""

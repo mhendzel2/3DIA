@@ -79,6 +79,15 @@ tracking = [
     "btrack>=0.5.0",
     "trackpy>=0.5.0",
 ]
+advanced = [
+    "trimesh>=4.4.0",
+    "pyvista>=0.44.0",
+    "POT>=0.9.4",
+    "scikit-learn>=1.4.0",
+    "umap-learn>=0.5.6",
+    "hdbscan>=0.8.38",
+    "ripser>=0.6.8",
+]
 dev = [
     "pytest>=8.2.0",
     "ruff>=0.8.0",

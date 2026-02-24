@@ -4,11 +4,13 @@ Implements cell lineage tracking, gap closing, and track editing similar to Imar
 """
 
 import numpy as np
+import pandas as pd
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QSpinBox, QDoubleSpinBox, QComboBox, 
                              QGroupBox, QCheckBox, QTableWidget, QTableWidgetItem,
                              QTreeWidget, QTreeWidgetItem, QSplitter, QProgressBar)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from napari.qt.threading import thread_worker
 from napari.layers import Labels
 
 try:
@@ -19,6 +21,7 @@ except ImportError:
     HAS_SCIPY = False
 
 from pymaris.jobs import JobCancelledError, JobRunner
+from pymaris.timelapse_processor import cluster_morphokinetic_trajectories
 from pymaris.workflow import WorkflowResult, WorkflowStep
 from pymaris_napari.provenance import record_ui_workflow_result
 from pymaris_napari.settings import load_project_store_settings, resolve_project_store_dir
@@ -306,6 +309,7 @@ class AdvancedTrackingWidget(QWidget):
         self.viewer = viewer
         self.current_results = None
         self.tracking_thread = None
+        self.behavior_worker = None
         self.job_runner = JobRunner(max_workers=2)
         self.workflow_handle = None
         self.workflow_step = None
@@ -403,6 +407,12 @@ class AdvancedTrackingWidget(QWidget):
         self.track_btn.clicked.connect(self.start_tracking)
         self.track_btn.setStyleSheet("font-weight: bold; padding: 10px;")
         main_layout.addWidget(self.track_btn)
+
+        self.behavior_btn = QPushButton("Discover Behavioral States (UMAP + HDBSCAN)")
+        self.behavior_btn.clicked.connect(self.discover_behavioral_states)
+        self.behavior_btn.setEnabled(False)
+        main_layout.addWidget(self.behavior_btn)
+
         self.cancel_btn = QPushButton("Cancel Tracking")
         self.cancel_btn.clicked.connect(self.cancel_tracking)
         self.cancel_btn.setEnabled(False)
@@ -654,6 +664,7 @@ class AdvancedTrackingWidget(QWidget):
         self.cancel_btn.setEnabled(False)
         self.export_tracks_btn.setEnabled(True)
         self.export_lineage_btn.setEnabled(True)
+        self.behavior_btn.setEnabled(True)
         self.workflow_handle = None
         
         # Display statistics
@@ -697,6 +708,99 @@ class AdvancedTrackingWidget(QWidget):
         self.status_label.setText(f"Error: {error_message}")
         self.status_label.setStyleSheet("color: red; font-style: italic;")
         self.progress_bar.setValue(0)
+
+    def discover_behavioral_states(self):
+        """Cluster track morpho-kinetic behavior and map states to Tracks layer color."""
+        if self.current_results is None:
+            self.status_label.setText("Run tracking first to discover behavioral states")
+            self.status_label.setStyleSheet("color: #666; font-style: italic;")
+            return
+
+        tracking_df = self._build_tracking_dataframe(self.current_results.get("tracks", []))
+        if tracking_df.empty:
+            self.status_label.setText("No track detections available for behavioral clustering")
+            self.status_label.setStyleSheet("color: #666; font-style: italic;")
+            return
+
+        feature_cols = [col for col in ["area", "y", "x"] if col in tracking_df.columns]
+        if not feature_cols:
+            self.status_label.setText("Missing required features for behavioral clustering")
+            self.status_label.setStyleSheet("color: #666; font-style: italic;")
+            return
+
+        @thread_worker
+        def _worker():
+            return cluster_morphokinetic_trajectories(tracking_df, feature_cols)
+
+        self.status_label.setText("Discovering behavioral states...")
+        self.status_label.setStyleSheet("color: #666; font-style: italic;")
+        self.behavior_worker = _worker()
+        self.behavior_worker.returned.connect(self._on_behavioral_states_ready)
+        self.behavior_worker.errored.connect(
+            lambda exc: self._on_behavioral_state_error(
+                f"Behavioral discovery failed: {exc}. Install with: pip install pymaris[advanced]"
+            )
+        )
+        self.behavior_worker.start()
+
+    def _build_tracking_dataframe(self, tracks):
+        """Convert internal track dictionary payload into a tabular DataFrame."""
+        rows = []
+        for track in tracks:
+            track_id = track.get("track_id")
+            for det in track.get("detections", []):
+                pos = det.get("position", ())
+                row = {
+                    "track_id": track_id,
+                    "time": det.get("timepoint", 0),
+                    "area": float(det.get("area", 0.0)),
+                }
+                if len(pos) == 2:
+                    row.update({"y": float(pos[0]), "x": float(pos[1])})
+                elif len(pos) >= 3:
+                    row.update({"z": float(pos[0]), "y": float(pos[1]), "x": float(pos[2])})
+                rows.append(row)
+        return pd.DataFrame(rows)
+
+    def _on_behavioral_states_ready(self, clustered_df: pd.DataFrame):
+        """Handle completed behavioral clustering and refresh napari Tracks coloring."""
+        if clustered_df.empty or "Behavioral_State_ID" not in clustered_df.columns:
+            self._on_behavioral_state_error("Behavioral clustering returned no state assignments")
+            return
+
+        layer_name = f"Tracks_{self.layer_combo.currentText()}"
+        tracks_layer = None
+        for layer in self.viewer.layers:
+            if layer.name == layer_name and hasattr(layer, "properties"):
+                tracks_layer = layer
+                break
+
+        if tracks_layer is None:
+            self._on_behavioral_state_error("Tracks layer not found for behavioral state coloring")
+            return
+
+        track_state = (
+            clustered_df[["track_id", "Behavioral_State_ID"]]
+            .drop_duplicates(subset=["track_id"])
+            .set_index("track_id")["Behavioral_State_ID"]
+            .to_dict()
+        )
+
+        track_ids = np.asarray(tracks_layer.data[:, 0], dtype=int)
+        mapped_states = np.asarray([track_state.get(int(track_id), -1) for track_id in track_ids], dtype=int)
+
+        properties = dict(getattr(tracks_layer, "properties", {}))
+        properties["Behavioral_State_ID"] = mapped_states
+        tracks_layer.properties = properties
+        if hasattr(tracks_layer, "color_by"):
+            tracks_layer.color_by = "Behavioral_State_ID"
+
+        self.status_label.setText("Behavioral states discovered and mapped to track colors")
+        self.status_label.setStyleSheet("color: green; font-style: italic;")
+
+    def _on_behavioral_state_error(self, message: str):
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet("color: red; font-style: italic;")
     
     def _build_lineage_tree(self, tracks, lineage_events):
         """Build lineage tree visualization"""
