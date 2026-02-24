@@ -15,7 +15,7 @@ from pymaris.logging import get_logger
 
 LOGGER = get_logger(__name__)
 
-SPECIALIZED_EXTENSIONS = {".czi", ".lif", ".nd2", ".nd", ".oib", ".oif", ".ims", ".lsm"}
+SPECIALIZED_EXTENSIONS = {".czi", ".lif", ".nd2", ".nd", ".htd", ".oib", ".oif", ".ims", ".lsm"}
 TIFF_EXTENSIONS = {".tif", ".tiff"}
 
 try:  # pragma: no cover - optional dependency
@@ -83,6 +83,13 @@ def open_image(
         if scene is not None or scene_index is not None:
             raise ValueError("scene selection is not supported for MetaMorph ND inputs")
         return _open_metamorph_nd(source=source, axes=axes)
+    if suffix == ".htd":
+        return _open_metaxpress_htd(
+            source=source,
+            axes=axes,
+            scene=scene,
+            scene_index=scene_index,
+        )
     aics_error: Exception | None = None
     if suffix in SPECIALIZED_EXTENSIONS:
         if HAS_AICSIMAGEIO:
@@ -157,6 +164,9 @@ def list_scenes(path: str | Path) -> list[str]:
     suffix = source.suffix.lower()
     if _is_zarr_path(source):
         return ["default"]
+
+    if suffix == ".htd":
+        return _list_metaxpress_htd_scenes(source)
 
     if HAS_AICSIMAGEIO and suffix in SPECIALIZED_EXTENSIONS:
         try:
@@ -457,6 +467,166 @@ def _open_metamorph_nd(
         },
         channel_names=channel_names,
     )
+
+
+def _open_metaxpress_htd(
+    source: Path,
+    axes: Sequence[str] | None,
+    scene: str | None,
+    scene_index: int | None,
+) -> ImageVolume:
+    entries = _discover_metaxpress_htd_entries(source)
+    if not entries:
+        raise RuntimeError(
+            f"no companion image files found for MetaXpress HTD file: {source}. "
+            "Expected sidecar .tif/.tiff/.stk files in the same directory."
+        )
+
+    scenes = sorted({entry[0] for entry in entries}, key=_natural_sort_key)
+    selected_scene = _resolve_scene_selection(
+        scenes,
+        source=source,
+        scene=scene,
+        scene_index=scene_index,
+    )
+    if selected_scene is None:
+        selected_scene = scenes[0]
+
+    selected_entries = [entry for entry in entries if entry[0] == selected_scene]
+    if not selected_entries:
+        raise RuntimeError(f"selected scene '{selected_scene}' has no files in {source}")
+
+    has_channel = any("C" in idx for _, _, idx in selected_entries)
+    has_z = any("Z" in idx for _, _, idx in selected_entries)
+    has_time = any("T" in idx for _, _, idx in selected_entries)
+
+    dim_order: list[str] = []
+    if has_time:
+        dim_order.append("T")
+    if has_channel:
+        dim_order.append("C")
+    if has_z:
+        dim_order.append("Z")
+
+    index_values: dict[str, set[int]] = {axis: set() for axis in dim_order}
+    loaded_planes: list[tuple[tuple[int, ...], np.ndarray]] = []
+    sample_shape: tuple[int, ...] | None = None
+
+    for _, file_path, indices in selected_entries:
+        plane = _load_metamorph_plane(file_path)
+        if sample_shape is None:
+            sample_shape = tuple(int(v) for v in plane.shape)
+        elif tuple(int(v) for v in plane.shape) != sample_shape:
+            raise RuntimeError(
+                f"inconsistent plane shapes in HTD series for {source}: "
+                f"expected {sample_shape}, got {plane.shape} in {file_path.name}"
+            )
+
+        key_parts: list[int] = []
+        for axis in dim_order:
+            axis_idx = int(indices.get(axis, 1)) - 1
+            key_parts.append(axis_idx)
+            index_values[axis].add(axis_idx)
+        loaded_planes.append((tuple(key_parts), plane))
+
+    if sample_shape is None:
+        raise RuntimeError(f"failed to read any image planes for MetaXpress HTD file: {source}")
+
+    axis_maps: dict[str, list[int]] = {
+        axis: sorted(values) if values else [0]
+        for axis, values in index_values.items()
+    }
+    axis_index_lookup: dict[str, dict[int, int]] = {
+        axis: {value: idx for idx, value in enumerate(values)}
+        for axis, values in axis_maps.items()
+    }
+
+    output_shape = tuple(len(axis_maps[axis]) for axis in dim_order) + sample_shape
+    output = np.zeros(output_shape, dtype=loaded_planes[0][1].dtype)
+    for key_parts, plane in loaded_planes:
+        normalized: list[int] = []
+        for pos, axis in enumerate(dim_order):
+            normalized.append(axis_index_lookup[axis][int(key_parts[pos])])
+        output[tuple(normalized)] = plane
+
+    chosen_axes = tuple(axes) if axes is not None else tuple(dim_order + ["Y", "X"])
+    if len(chosen_axes) != output.ndim:
+        raise ValueError(
+            f"axes length mismatch for MetaXpress HTD output ({output.ndim} dims): {chosen_axes!r}"
+        )
+
+    wave_names = _parse_metamorph_nd_metadata(source).get("wave_names", [])
+    channel_names: list[str] = []
+    if "C" in chosen_axes:
+        expected_channels = int(output.shape[chosen_axes.index("C")])
+        if isinstance(wave_names, list) and len(wave_names) == expected_channels:
+            channel_names = [str(name) for name in wave_names]
+
+    return ImageVolume(
+        array=output,
+        axes=chosen_axes,
+        metadata={
+            "name": source.name,
+            "source_path": str(source),
+            "reader": "metaxpress_htd",
+            "scene": selected_scene,
+            "available_scenes": scenes,
+            "file_count": len(selected_entries),
+        },
+        channel_names=channel_names,
+    )
+
+
+def _list_metaxpress_htd_scenes(source: Path) -> list[str]:
+    entries = _discover_metaxpress_htd_entries(source)
+    scenes = sorted({entry[0] for entry in entries}, key=_natural_sort_key)
+    return scenes or ["default"]
+
+
+def _discover_metaxpress_htd_entries(source: Path) -> list[tuple[str, Path, dict[str, int]]]:
+    supported_ext = {".tif", ".tiff", ".stk"}
+    candidates = [
+        path
+        for path in source.parent.glob("*")
+        if path.is_file() and path.suffix.lower() in supported_ext
+    ]
+
+    entries: list[tuple[str, Path, dict[str, int]]] = []
+    for file_path in sorted(candidates, key=lambda path: _natural_sort_key(path.name)):
+        indices = _extract_metaxpress_htd_indices(file_path)
+        if not indices:
+            continue
+        well = indices.get("WELL", "UNKNOWN")
+        site = int(indices.get("S", 1))
+        scene = f"{well}_s{site:02d}" if well != "UNKNOWN" else f"scene_s{site:02d}"
+        entries.append((scene, file_path, indices))
+
+    return entries
+
+
+def _extract_metaxpress_htd_indices(path: Path) -> dict[str, int | str]:
+    stem = path.stem.lower()
+    indices: dict[str, int | str] = {}
+
+    well_match = re.search(r"([a-p](?:0[1-9]|1[0-9]|2[0-4]))", stem, flags=re.IGNORECASE)
+    if well_match:
+        indices["WELL"] = well_match.group(1).upper()
+
+    code_map = {
+        "w": "C",
+        "c": "C",
+        "z": "Z",
+        "t": "T",
+        "s": "S",
+    }
+    for code, axis in code_map.items():
+        match = re.search(rf"(?:^|[_\-.]){code}(\d+)(?=$|[_\-.])", stem)
+        if not match:
+            match = re.search(rf"{code}(\d+)", stem)
+        if match:
+            indices[axis] = int(match.group(1))
+
+    return indices
 
 
 def _discover_metamorph_companion_files(source: Path, metadata: Mapping[str, Any]) -> list[Path]:

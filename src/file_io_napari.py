@@ -35,7 +35,7 @@ def get_reader(path):
     This function is called by Napari when a file is opened. It checks if
     the file format is supported and, if so, returns the actual reader function.
     """
-    if isinstance(path, str) and any(path.endswith(ext) for ext in ['.czi', '.lif', '.nd2', '.nd', '.oib', '.ims', '.tif', '.tiff']):
+    if isinstance(path, str) and any(path.endswith(ext) for ext in ['.czi', '.lif', '.nd2', '.nd', '.htd', '.oib', '.ims', '.tif', '.tiff']):
         return read_microscopy_file
     return None
 
@@ -50,7 +50,7 @@ def read_microscopy_file(path):
         LayerDataTuple: A tuple containing (data, metadata, layer_type).
     """
     try:
-        if path.endswith('.nd'):
+        if path.endswith('.nd') or path.endswith('.htd'):
             return read_with_pymaris_core(path)
 
         # Try different readers in order of preference
