@@ -114,6 +114,9 @@ class SmartFileLoader:
         
         if ext == '.nd2' and 'nd2reader' in available_readers:
             return SmartFileLoader._load_with_nd2reader(file_path)
+
+        if ext == '.nd':
+            return SmartFileLoader._load_with_metamorph_nd(file_path)
         
         if ext in ['.mrc', '.map'] and 'mrcfile' in available_readers:
             return SmartFileLoader._load_with_mrcfile(file_path)
@@ -214,6 +217,25 @@ class SmartFileLoader:
             'scale': [1.0] * data.ndim
         }
         
+        return data, metadata
+
+    @staticmethod
+    def _load_with_metamorph_nd(file_path):
+        """Load MetaMorph ND file and associated sidecar planes via core I/O."""
+        from pymaris.io import open_image as core_open_image
+
+        image = core_open_image(file_path)
+        data = np.asarray(image.as_numpy())
+        metadata = {
+            'name': file_path.stem,
+            'file_path': str(file_path),
+            'shape': data.shape,
+            'dtype': data.dtype,
+            'reader': 'pymaris.io (metamorph_nd)',
+            'scale': list(image.scale_for_axes()),
+            'axes': list(image.axes),
+            'source_metadata': dict(image.metadata),
+        }
         return data, metadata
     
     @staticmethod
@@ -686,6 +708,7 @@ class EnhancedFileIOWidget(QWidget):
             filters.insert(0, "Leica LIF (*.lif)")
         if 'nd2reader' in available_readers:
             filters.insert(0, "Nikon ND2 (*.nd2)")
+        filters.insert(0, "MetaMorph ND (*.nd)")
         if 'mrcfile' in available_readers:
             filters.insert(0, "MRC files (*.mrc *.map)")
         if 'zarr' in available_readers:

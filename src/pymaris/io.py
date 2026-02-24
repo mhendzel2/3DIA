@@ -15,7 +15,7 @@ from pymaris.logging import get_logger
 
 LOGGER = get_logger(__name__)
 
-SPECIALIZED_EXTENSIONS = {".czi", ".lif", ".nd2", ".oib", ".oif", ".ims", ".lsm"}
+SPECIALIZED_EXTENSIONS = {".czi", ".lif", ".nd2", ".nd", ".oib", ".oif", ".ims", ".lsm"}
 TIFF_EXTENSIONS = {".tif", ".tiff"}
 
 try:  # pragma: no cover - optional dependency
@@ -79,6 +79,10 @@ def open_image(
         if scene is not None or scene_index is not None:
             raise ValueError("scene selection is not supported for TIFF inputs")
         return _open_tiff(source=source, axes=axes, prefer_lazy=prefer_lazy, chunks=chunks)
+    if suffix == ".nd":
+        if scene is not None or scene_index is not None:
+            raise ValueError("scene selection is not supported for MetaMorph ND inputs")
+        return _open_metamorph_nd(source=source, axes=axes)
     aics_error: Exception | None = None
     if suffix in SPECIALIZED_EXTENSIONS:
         if HAS_AICSIMAGEIO:
@@ -335,6 +339,206 @@ def _open_imaris_hdf5(
         pixel_size=pixel_size,
         axis_units=axis_units,
     )
+
+
+def _open_metamorph_nd(
+    source: Path,
+    axes: Sequence[str] | None,
+) -> ImageVolume:
+    metadata = _parse_metamorph_nd_metadata(source)
+    files = _discover_metamorph_companion_files(source=source, metadata=metadata)
+    if not files:
+        raise RuntimeError(
+            f"no companion image files found for MetaMorph ND file: {source}. "
+            "Expected sidecar .tif/.tiff/.stk files in the same directory."
+        )
+
+    entries: list[tuple[Path, dict[str, int]]] = []
+    max_t = 1
+    max_s = 1
+    for file_path in files:
+        indices = _extract_metamorph_indices(file_path)
+        entries.append((file_path, indices))
+        if "T" in indices:
+            max_t = max(max_t, int(indices["T"]))
+        if "S" in indices:
+            max_s = max(max_s, int(indices["S"]))
+
+    has_channel = any("C" in idx for _, idx in entries)
+    has_z = any("Z" in idx for _, idx in entries)
+    has_time_or_stage = any("T" in idx or "S" in idx for _, idx in entries)
+
+    dim_order: list[str] = []
+    if has_time_or_stage:
+        dim_order.append("T")
+    if has_channel:
+        dim_order.append("C")
+    if has_z:
+        dim_order.append("Z")
+
+    index_values: dict[str, set[int]] = {axis: set() for axis in dim_order}
+    loaded_planes: list[tuple[tuple[int, ...], np.ndarray]] = []
+    sample_shape: tuple[int, ...] | None = None
+
+    for file_path, indices in entries:
+        plane = _load_metamorph_plane(file_path)
+        if sample_shape is None:
+            sample_shape = tuple(int(v) for v in plane.shape)
+        elif tuple(int(v) for v in plane.shape) != sample_shape:
+            raise RuntimeError(
+                f"inconsistent plane shapes in MetaMorph ND series for {source}: "
+                f"expected {sample_shape}, got {plane.shape} in {file_path.name}"
+            )
+
+        t_component = int(indices.get("T", 1)) - 1
+        s_component = int(indices.get("S", 1)) - 1
+        t_index = (s_component * max_t) + t_component
+        c_index = int(indices.get("C", 1)) - 1
+        z_index = int(indices.get("Z", 1)) - 1
+
+        key_parts: list[int] = []
+        for axis in dim_order:
+            if axis == "T":
+                key_parts.append(t_index)
+                index_values[axis].add(t_index)
+            elif axis == "C":
+                key_parts.append(c_index)
+                index_values[axis].add(c_index)
+            elif axis == "Z":
+                key_parts.append(z_index)
+                index_values[axis].add(z_index)
+        loaded_planes.append((tuple(key_parts), plane))
+
+    if sample_shape is None:
+        raise RuntimeError(f"failed to read any image planes for MetaMorph ND file: {source}")
+
+    axis_maps: dict[str, list[int]] = {
+        axis: sorted(values) if values else [0]
+        for axis, values in index_values.items()
+    }
+    axis_index_lookup: dict[str, dict[int, int]] = {
+        axis: {value: idx for idx, value in enumerate(values)}
+        for axis, values in axis_maps.items()
+    }
+
+    output_shape = tuple(len(axis_maps[axis]) for axis in dim_order) + sample_shape
+    output = np.zeros(output_shape, dtype=loaded_planes[0][1].dtype)
+
+    for key_parts, plane in loaded_planes:
+        normalized: list[int] = []
+        for pos, axis in enumerate(dim_order):
+            normalized.append(axis_index_lookup[axis][int(key_parts[pos])])
+        output[tuple(normalized)] = plane
+
+    chosen_axes = tuple(axes) if axes is not None else tuple(dim_order + ["Y", "X"])
+    if len(chosen_axes) != output.ndim:
+        raise ValueError(
+            f"axes length mismatch for MetaMorph ND output ({output.ndim} dims): {chosen_axes!r}"
+        )
+
+    channel_names: list[str] = []
+    if "C" in chosen_axes:
+        expected_channels = int(output.shape[chosen_axes.index("C")])
+        wave_names = metadata.get("wave_names", [])
+        if isinstance(wave_names, list) and len(wave_names) == expected_channels:
+            channel_names = [str(name) for name in wave_names]
+
+    return ImageVolume(
+        array=output,
+        axes=chosen_axes,
+        metadata={
+            "name": source.name,
+            "source_path": str(source),
+            "reader": "metamorph_nd",
+            "file_count": len(files),
+            "wave_names": list(metadata.get("wave_names", [])),
+            "stage_positions": max_s,
+            "timepoints": max_t,
+        },
+        channel_names=channel_names,
+    )
+
+
+def _discover_metamorph_companion_files(source: Path, metadata: Mapping[str, Any]) -> list[Path]:
+    supported_ext = {".tif", ".tiff", ".stk"}
+    candidates: list[Path] = []
+
+    referenced_files = metadata.get("referenced_files", [])
+    if isinstance(referenced_files, list):
+        for value in referenced_files:
+            ref = source.parent / str(value)
+            if ref.exists() and ref.suffix.lower() in supported_ext:
+                candidates.append(ref)
+
+    if not candidates:
+        for entry in source.parent.glob(f"{source.stem}*"):
+            if not entry.is_file():
+                continue
+            if entry.resolve() == source.resolve():
+                continue
+            if entry.suffix.lower() in supported_ext:
+                candidates.append(entry)
+
+    unique = {path.resolve(): path for path in candidates}
+    return sorted(unique.values(), key=lambda path: _natural_sort_key(path.name))
+
+
+def _parse_metamorph_nd_metadata(source: Path) -> dict[str, Any]:
+    text = source.read_text(encoding="utf-8", errors="ignore")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    wave_names: dict[int, str] = {}
+    for line in lines:
+        match = re.search(r'"WaveName(\d+)"\s*,\s*"([^"]+)"', line, flags=re.IGNORECASE)
+        if match:
+            wave_names[int(match.group(1))] = str(match.group(2)).strip()
+
+    referenced_files: list[str] = []
+    for match in re.finditer(r'"([^"\r\n]+\.(?:tif|tiff|stk))"', text, flags=re.IGNORECASE):
+        referenced_files.append(str(match.group(1)).strip())
+
+    return {
+        "wave_names": [wave_names[idx] for idx in sorted(wave_names.keys())],
+        "referenced_files": referenced_files,
+    }
+
+
+def _extract_metamorph_indices(path: Path) -> dict[str, int]:
+    stem = path.stem.lower()
+    indices: dict[str, int] = {}
+
+    code_map = {
+        "w": "C",
+        "c": "C",
+        "z": "Z",
+        "t": "T",
+        "s": "S",
+    }
+
+    for code, axis in code_map.items():
+        match = re.search(rf"(?:^|[_\-.]){code}(\d+)(?=$|[_\-.])", stem)
+        if not match:
+            match = re.search(rf"{code}(\d+)", stem)
+        if match:
+            indices[axis] = int(match.group(1))
+
+    return indices
+
+
+def _load_metamorph_plane(path: Path) -> np.ndarray:
+    try:
+        plane = np.asarray(tifffile.imread(path))
+    except Exception:
+        plane = np.asarray(iio.imread(path))
+
+    if plane.ndim != 2:
+        plane = np.squeeze(plane)
+    if plane.ndim != 2:
+        raise RuntimeError(
+            f"unsupported MetaMorph ND companion plane rank {plane.ndim} in {path.name}; "
+            "expected 2D planes"
+        )
+    return plane
 
 
 def _list_imaris_scenes_hdf5(source: Path) -> list[str]:

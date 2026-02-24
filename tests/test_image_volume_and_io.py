@@ -141,3 +141,30 @@ def test_open_ims_aics_failure_without_h5py_has_actionable_error(tmp_path: Path,
 
     with pytest.raises(RuntimeError, match="Install `h5py`"):
         open_image(ims_path)
+
+
+def test_open_metamorph_nd_with_companion_tiffs(tmp_path: Path) -> None:
+    nd_path = tmp_path / "metamorph.nd"
+    nd_path.write_text(
+        '"WaveName1", "DAPI"\n"WaveName2", "GFP"\n',
+        encoding="utf-8",
+    )
+
+    tifffile = pytest.importorskip("tifffile")
+
+    tifffile.imwrite(tmp_path / "metamorph_w1_t1.tif", np.full((4, 5), 11, dtype=np.uint16))
+    tifffile.imwrite(tmp_path / "metamorph_w2_t1.tif", np.full((4, 5), 12, dtype=np.uint16))
+    tifffile.imwrite(tmp_path / "metamorph_w1_t2.tif", np.full((4, 5), 21, dtype=np.uint16))
+    tifffile.imwrite(tmp_path / "metamorph_w2_t2.tif", np.full((4, 5), 22, dtype=np.uint16))
+
+    loaded = open_image(nd_path)
+    assert loaded.axes == ("T", "C", "Y", "X")
+    assert loaded.shape == (2, 2, 4, 5)
+    assert loaded.metadata["reader"] == "metamorph_nd"
+    assert loaded.channel_names == ["DAPI", "GFP"]
+
+    arr = loaded.as_numpy()
+    assert int(arr[0, 0, 0, 0]) == 11
+    assert int(arr[0, 1, 0, 0]) == 12
+    assert int(arr[1, 0, 0, 0]) == 21
+    assert int(arr[1, 1, 0, 0]) == 22

@@ -73,9 +73,9 @@ This is a Scientific Image Analysis application that replicates Napari Hub plugi
 - **Image Processing**: PIL/Pillow (optional - basic implementations provided)
 
 ### Napari Integration Dependencies
-- **Napari Framework**: napari[all], magicgui, QtPy
+- **Napari Framework**: napari, magicgui, QtPy, PyQt6
 - **Advanced Plugins**: cellpose, stardist, btrack (optional)
-- **File I/O**: aicsimageio, tifffile, imageio (optional)
+- **File I/O**: tifffile, imageio, h5py, zarr, readlif, nd2reader, czifile (optional)
 
 ### Fallback Strategy
 The application is designed to work with pure Python without external dependencies. All core functionality has fallback implementations when scientific libraries are not available.

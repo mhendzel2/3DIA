@@ -1,62 +1,49 @@
-# Core napari and GUI dependencies
-napari[all]>=0.4.18
-PyQt6>=6.4.0
-PyQt6-Qt6>=6.4.0
-qtpy>=2.3.0
-magicgui>=0.5.0
+# Unified installer requirements for install.bat
+# This includes core app dependencies plus format support (Imaris/Zarr/CZI/LIF/ND2)
 
-# Scientific computing core
-numpy>=1.21.0
-scipy>=1.9.0
-scikit-image>=0.19.0
-matplotlib>=3.5.0
-pandas>=1.5.0
+# Core scientific stack
+numpy>=1.24.0
+scipy>=1.10.0
+scikit-image>=0.21.0
+pandas>=2.0.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+scikit-learn>=1.3.0
 
-# Image I/O and processing
-aicsimageio>=4.9.4
-tifffile>=2023.3.15
-imagecodecs>=2023.7.10
-imageio>=2.25.0
-Pillow>=9.0.0
-h5py>=3.7.0
-zarr>=2.13.0
-
-# Data processing
-dask>=2023.1.0
-
-# Napari ecosystem
+# Napari + Qt stack
+napari>=0.6.0
+PyQt6>=6.6.0
+PyQt6-Qt6>=6.6.0
+qtpy>=2.4.0
+magicgui>=0.8.0
 napari-plugin-engine>=0.2.0
 napari-svg>=0.2.1
 npe2>=0.7.9
 
-# Web framework (optional)
-Flask>=2.3.0
-Werkzeug>=2.3.0
-requests>=2.28.0
-
-# AI/ML packages (optional but recommended)
-cellpose>=2.2.0
-stardist>=0.8.3
-csbdeep>=0.7.4
-
-# Additional scientific packages used by widgets
+# Core I/O + processing
+imageio>=2.34.0
+Pillow>=10.0.0
+tifffile>=2024.2.12
+h5py>=3.10.0
+zarr>=2.18.0
+dask[array]>=2024.1.0
 mrcfile>=1.4.0
-opencv-python>=4.7.0
-
-# Documentation and utilities
-numpydoc>=1.9.0
 ome-types>=0.6.2
 ome-zarr>=0.10.2
+opencv-python>=4.9.0
+pims>=0.6.1
 
-# Additional Analysis
-scikit-learn>=1.0.0
+# Format-specific readers
+readlif>=0.6.4
+nd2reader>=3.3.0
+czifile>=2019.7.2
 
-# File Format Support (Optional)
-# readlif>=0.6.0       # Leica LIF files
-# nd2reader>=3.2.0     # Nikon ND2 files
-# czifile>=2019.0.0    # Zeiss CZI files
+# Web interface dependencies
+Flask>=3.0.0
+Werkzeug>=3.0.0
+requests>=2.31.0
 
-# Development Tools (Optional)
-# pytest>=6.0.0
-# black>=21.0.0
-# flake8>=3.9.0
+# Utility/runtime dependencies used by diagnostics and widgets
+numpydoc>=1.9.0
+console>=0.1.4
+

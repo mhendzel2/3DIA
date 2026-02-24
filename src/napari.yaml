@@ -38,6 +38,7 @@ contributions:
         - '*.czi'
         - '*.lif'
         - '*.nd2'
+        - '*.nd'
         - '*.oib'
         - '*.oif'
         - '*.tif'

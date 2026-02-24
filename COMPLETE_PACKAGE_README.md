@@ -80,19 +80,22 @@
 3. Follow the prompts for automatic installation
 
 ### Manual Installation
-1. Install Python 3.8+ if not already installed
-2. Run the appropriate installer:
+1. Install Python 3.10+ if not already installed
+2. Use the unified installer on Windows:
    - **Windows**: Double-click `install.bat`
-   - **macOS/Linux**: Run `./scripts/install.sh`
-   - **Any platform**: `python scripts/install.py`
+3. Cross-platform manual path:
+   - `python -m venv venv`
+   - Activate venv and run `pip install -r requirements.txt`
+   - Run `pip install -e .`
 
 ### Napari Desktop Version
 ```bash
-# Install Napari and dependencies
-pip install napari[all] numpy scipy scikit-image matplotlib
+# Install dependencies
+pip install -r requirements.txt
+pip install -e .
 
 # Launch the application
-python main_napari.py
+python src/main_napari.py
 ```
 
 ### Web Interface Only
@@ -105,7 +108,7 @@ python main.py --mode web
 ## System Requirements
 
 ### Minimum
-- Python 3.8+
+- Python 3.10+
 - 8GB RAM
 - OpenGL 3.3+ (for Napari)
 - 2GB free storage

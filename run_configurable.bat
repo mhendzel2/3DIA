@@ -10,7 +10,7 @@ echo.
 REM Check if venv exists
 if not exist "venv\Scripts\python.exe" (
     echo ERROR: Virtual environment not found!
-    echo Please run install_minimal.bat first.
+    echo Please run install.bat first.
     echo.
     pause
     exit /b 1

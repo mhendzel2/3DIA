@@ -1,70 +1,10 @@
-# =============================================================================
-# COMPREHENSIVE DEPENDENCY LIST FOR SCIENTIFIC IMAGE ANALYZER
-# =============================================================================
+# Alias file retained for compatibility.
+-r requirements.txt
 
-# Core napari and GUI dependencies (REQUIRED)
-napari[all]>=0.4.18
-PyQt6>=6.4.0
-PyQt6-Qt6>=6.4.0
-qtpy>=2.3.0
-magicgui>=0.5.0
-
-# Scientific computing core (REQUIRED)
-numpy>=1.21.0
-scipy>=1.9.0
-scikit-image>=0.19.0
-matplotlib>=3.5.0
-pandas>=1.5.0
-
-# Image I/O and processing (REQUIRED)
-aicsimageio>=4.9.4
-tifffile>=2023.3.15
-imagecodecs>=2023.7.10
-imageio>=2.25.0
-Pillow>=9.0.0
-h5py>=3.7.0
-zarr>=2.13.0
-
-# Data processing (REQUIRED)
-dask>=2023.1.0
-
-# Napari ecosystem (REQUIRED)
-napari-plugin-engine>=0.2.0
-napari-svg>=0.2.1
-npe2>=0.7.9
-
-# Web framework (OPTIONAL - for web interface)
-Flask>=2.3.0
-Werkzeug>=2.3.0
-requests>=2.28.0
-
-# AI/ML packages (OPTIONAL but highly recommended)
-# Uncomment the following lines if you want AI segmentation features:
+# Optional heavy extras (uncomment if needed)
+# aicsimageio>=4.14.0
 # cellpose>=2.2.0
 # stardist>=0.8.3
 # csbdeep>=0.7.4
-# torch>=1.13.0
-# segment-anything
-
-# Additional scientific packages used by widgets (OPTIONAL)
-mrcfile>=1.4.0
-opencv-python>=4.7.0
-
-# Documentation and utilities (REQUIRED)
-numpydoc>=1.9.0
-ome-types>=0.6.2
-ome-zarr>=0.10.2
-console>=0.1.4
-
-# Advanced microscopy file formats (OPTIONAL)
-# readlif>=0.6.4        # For Leica LIF files
-# pylibczirw>=3.1.1     # For Zeiss CZI files  
-# nd2reader>=3.3.0      # For Nikon ND2 files
-# czifile>=2019.7.2     # Additional CZI support
-
-# Advanced tracking (OPTIONAL)
-# btrack>=0.5.0         # For advanced cell tracking
-# trackpy>=0.5.0        # For particle tracking
-
-# Development package (install the project itself from current directory)
--e .
+# torch>=2.1.0
+# segment-anything>=1.0

@@ -275,20 +275,9 @@ Efficient multi-file analysis:
 
 ### Requirements
 ```bash
-# Core dependencies
-pip install numpy scipy scikit-image matplotlib pandas
-
-# Napari desktop interface
-pip install napari[all] PyQt6
-
-# Optional AI/ML features
-pip install cellpose stardist
-
-# Optional file format support
-pip install aicsimageio tifffile mrcfile
-
-# Optional tracking
-pip install btrack
+# Python 3.10+
+# Dependencies are managed through requirements.txt
+pip install -r requirements.txt
 ```
 
 ### Quick Start
@@ -297,8 +286,15 @@ pip install btrack
 git clone https://github.com/mhendzel2/3DIA.git
 cd 3DIA
 
-# Install dependencies
+# Windows (recommended)
+install.bat
+
+# Cross-platform manual install
+python -m venv venv
+venv\Scripts\activate.bat
+python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+pip install -e .
 
 # Launch Napari interface
 python src/main_napari.py

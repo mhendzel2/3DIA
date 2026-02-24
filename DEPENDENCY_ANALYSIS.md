@@ -1,5 +1,7 @@
 # Dependency Analysis Report - Scientific Image Analyzer
 
+> Note: This is a historical analysis document. Current supported installation flow is unified via `install.bat` (Windows) and `requirements.txt`.
+
 ## Summary
 I've analyzed the entire codebase and identified all dependencies used throughout the project. Here's what I found and what I've updated:
 
@@ -34,21 +36,21 @@ I've analyzed the entire codebase and identified all dependencies used throughou
 - Added version constraints for better compatibility
 - Included all core dependencies
 
-### 3. New Files Created
+### 3. Dependency File Consolidation
 
-#### requirements-full.txt
-- Comprehensive dependency list with optional packages
-- Detailed comments explaining what each package is for
-- Optional AI/ML packages that can be uncommented if needed
+#### requirements.txt (single source of truth)
+- Unified dependency list for the supported installation flow
+- Used directly by `install.bat`
+- Includes core app, napari stack, and format readers
 
-#### requirements-minimal.txt (already existed)
-- Minimal set for quick fixes
-- Focused on immediate PyQt6 issue
+#### Compatibility aliases
+- `requirements-full.txt` and `requirements-minimal.txt` now point to `requirements.txt`
+- Kept only for compatibility with older commands
 
 ## Dependency Categories
 
 ### REQUIRED (Core functionality):
-- napari[all], PyQt6, qtpy, magicgui
+- napari, PyQt6, qtpy, magicgui
 - numpy, scipy, scikit-image, matplotlib, pandas
 - aicsimageio, tifffile, imageio, Pillow, h5py, zarr, dask
 - napari ecosystem packages
@@ -68,16 +70,12 @@ I've analyzed the entire codebase and identified all dependencies used throughou
 ### Standard Installation:
 ```bash
 pip install -r requirements.txt
+pip install -e .
 ```
 
-### Full Installation (with all optional packages):
+### Windows Unified Installer:
 ```bash
-pip install -r requirements-full.txt
-```
-
-### Minimal Fix (for PyQt6 issue):
-```bash
-pip install -r requirements-minimal.txt
+install.bat
 ```
 
 ## Verification
