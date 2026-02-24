@@ -117,6 +117,9 @@ class SmartFileLoader:
 
         if ext == '.nd':
             return SmartFileLoader._load_with_metamorph_nd(file_path)
+
+        if ext == '.htd':
+            return SmartFileLoader._load_with_metaxpress_htd(file_path, scene=scene, scene_index=scene_index)
         
         if ext in ['.mrc', '.map'] and 'mrcfile' in available_readers:
             return SmartFileLoader._load_with_mrcfile(file_path)
@@ -234,6 +237,33 @@ class SmartFileLoader:
             'reader': 'pymaris.io (metamorph_nd)',
             'scale': list(image.scale_for_axes()),
             'axes': list(image.axes),
+            'source_metadata': dict(image.metadata),
+        }
+        return data, metadata
+
+    @staticmethod
+    def _load_with_metaxpress_htd(file_path, scene=None, scene_index=None):
+        """Load MetaXpress HTD series and companion planes via core I/O."""
+        from pymaris.io import open_image as core_open_image
+
+        kwargs = {}
+        if scene is not None:
+            kwargs['scene'] = str(scene)
+        if scene_index is not None:
+            kwargs['scene_index'] = int(scene_index)
+
+        image = core_open_image(file_path, **kwargs)
+        data = np.asarray(image.as_numpy())
+        metadata = {
+            'name': file_path.stem,
+            'file_path': str(file_path),
+            'shape': data.shape,
+            'dtype': data.dtype,
+            'reader': 'pymaris.io (metaxpress_htd)',
+            'scale': list(image.scale_for_axes()),
+            'axes': list(image.axes),
+            'scene': image.metadata.get('scene'),
+            'available_scenes': image.metadata.get('available_scenes', []),
             'source_metadata': dict(image.metadata),
         }
         return data, metadata
@@ -709,6 +739,7 @@ class EnhancedFileIOWidget(QWidget):
         if 'nd2reader' in available_readers:
             filters.insert(0, "Nikon ND2 (*.nd2)")
         filters.insert(0, "MetaMorph ND (*.nd)")
+        filters.insert(0, "MetaXpress HTD (*.htd)")
         if 'mrcfile' in available_readers:
             filters.insert(0, "MRC files (*.mrc *.map)")
         if 'zarr' in available_readers:
@@ -763,7 +794,7 @@ class EnhancedFileIOWidget(QWidget):
     def _select_scene_load_options(self, file_path):
         """Prompt for a scene when a file exposes multiple scenes."""
         extension = Path(file_path).suffix.lower()
-        if extension not in {".ims", ".czi", ".lif", ".nd2", ".oib", ".oif"}:
+        if extension not in {".ims", ".czi", ".lif", ".nd2", ".htd", ".oib", ".oif"}:
             return {}
         try:
             from pymaris.io import list_scenes

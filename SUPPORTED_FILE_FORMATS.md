@@ -25,6 +25,7 @@ That installer includes core format support, including:
 | Zeiss CZI | `.czi` | `czifile` |
 | Leica LIF | `.lif` | `readlif` |
 | Nikon ND2 | `.nd2` | `nd2reader` |
+| MetaXpress HTD series | `.htd` + sidecar images | `pymaris.io` (series parser) |
 | Imaris | `.ims` | `h5py` |
 | MRC/CCP4 | `.mrc`, `.map` | `mrcfile` |
 | Zarr | `.zarr` | `zarr` |

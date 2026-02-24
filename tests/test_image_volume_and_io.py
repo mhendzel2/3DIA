@@ -168,3 +168,31 @@ def test_open_metamorph_nd_with_companion_tiffs(tmp_path: Path) -> None:
     assert int(arr[0, 1, 0, 0]) == 12
     assert int(arr[1, 0, 0, 0]) == 21
     assert int(arr[1, 1, 0, 0]) == 22
+
+
+def test_open_metaxpress_htd_scene_series(tmp_path: Path) -> None:
+    htd_path = tmp_path / "plate.htd"
+    htd_path.write_text('"WaveName1", "DAPI"\n"WaveName2", "GFP"\n', encoding="utf-8")
+
+    tifffile = pytest.importorskip("tifffile")
+
+    tifffile.imwrite(tmp_path / "plate_A01_s1_w1_t1.tif", np.full((3, 4), 11, dtype=np.uint16))
+    tifffile.imwrite(tmp_path / "plate_A01_s1_w2_t1.tif", np.full((3, 4), 12, dtype=np.uint16))
+    tifffile.imwrite(tmp_path / "plate_A01_s1_w1_t2.tif", np.full((3, 4), 21, dtype=np.uint16))
+    tifffile.imwrite(tmp_path / "plate_A01_s1_w2_t2.tif", np.full((3, 4), 22, dtype=np.uint16))
+    tifffile.imwrite(tmp_path / "plate_B01_s1_w1_t1.tif", np.full((3, 4), 31, dtype=np.uint16))
+
+    scenes = list_scenes(htd_path)
+    assert "A01_s01" in scenes
+    assert "B01_s01" in scenes
+
+    loaded = open_image(htd_path, scene="A01_s01")
+    assert loaded.axes == ("T", "C", "Y", "X")
+    assert loaded.shape == (2, 2, 3, 4)
+    assert loaded.metadata["reader"] == "metaxpress_htd"
+
+    arr = loaded.as_numpy()
+    assert int(arr[0, 0, 0, 0]) == 11
+    assert int(arr[0, 1, 0, 0]) == 12
+    assert int(arr[1, 0, 0, 0]) == 21
+    assert int(arr[1, 1, 0, 0]) == 22
