@@ -47,7 +47,7 @@ def compare_distributions_wasserstein(
             "Wasserstein comparison requires 'POT' and 'scikit-learn'. "
             "Install extras with: pip install pymaris[advanced]"
         )
-    import ot
+    ot = importlib.import_module("ot")
     from sklearn.preprocessing import StandardScaler
 
     _validate_feature_columns(features_A, feature_cols)
@@ -250,7 +250,7 @@ def compute_persistent_homology(point_cloud: np.ndarray, max_dimension: int = 2)
             "Persistent homology requires 'ripser'. "
             "Install extras with: pip install pymaris[advanced]"
         )
-    from ripser import ripser
+    ripser = importlib.import_module("ripser").ripser
 
     xyz = _validate_points_3d(point_cloud)
     if max_dimension < 0:

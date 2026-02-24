@@ -2,34 +2,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-try:  # pragma: no cover - optional dependency
-    from sklearn.preprocessing import StandardScaler
-
-    HAS_SKLEARN = True
-except Exception:  # pragma: no cover - optional dependency in advanced mode
-    StandardScaler = None  # type: ignore[assignment]
-    HAS_SKLEARN = False
-
-try:  # pragma: no cover - optional dependency
-    import umap
-
-    HAS_UMAP = True
-except Exception:  # pragma: no cover - optional dependency in advanced mode
-    umap = None  # type: ignore[assignment]
-    HAS_UMAP = False
-
-try:  # pragma: no cover - optional dependency
-    import hdbscan
-
-    HAS_HDBSCAN = True
-except Exception:  # pragma: no cover - optional dependency in advanced mode
-    hdbscan = None  # type: ignore[assignment]
-    HAS_HDBSCAN = False
+HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None
+HAS_UMAP = importlib.util.find_spec("umap") is not None
+HAS_HDBSCAN = importlib.util.find_spec("hdbscan") is not None
 
 
 def cluster_morphokinetic_trajectories(
@@ -62,6 +43,9 @@ def cluster_morphokinetic_trajectories(
             "Trajectory clustering requires 'scikit-learn', 'umap-learn', and 'hdbscan'. "
             "Install extras with: pip install pymaris[advanced]"
         )
+    hdbscan = importlib.import_module("hdbscan")
+    umap = importlib.import_module("umap")
+    from sklearn.preprocessing import StandardScaler
 
     if "track_id" not in tracking_df.columns:
         raise ValueError("tracking_df must include a 'track_id' column")
@@ -148,7 +132,8 @@ def calculate_markov_transitions(tracking_df: pd.DataFrame, state_column: str) -
         if len(sequence) < 2:
             continue
         for src, dst in zip(sequence[:-1], sequence[1:]):
-            transitions.loc[src, dst] += 1.0
+            current = np.asarray(transitions.at[src, dst], dtype=float).item()
+            transitions.at[src, dst] = current + 1.0
 
     row_sums = transitions.sum(axis=1)
     nonzero_rows = row_sums > 0

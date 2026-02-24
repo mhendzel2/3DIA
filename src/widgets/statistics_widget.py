@@ -17,8 +17,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 from napari.qt.threading import thread_worker
+from napari.layers import Image, Labels
 from skimage.measure import regionprops_table
 
+sns = None
 try:
     from magicgui import magicgui
 except Exception:  # pragma: no cover
@@ -55,9 +57,9 @@ class PandasModel(QAbstractTableModel):
             return str(self._data.iloc[index.row(), index.column()])
         return None
 
-    def headerData(self, col, orientation, role=Qt.ItemDataRole.DisplayRole):
+    def headerData(self, section, orientation, role: int = int(Qt.ItemDataRole.DisplayRole)):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            return self._data.columns[col]
+            return self._data.columns[section]
         return None
 
 
@@ -168,16 +170,16 @@ class StatisticsWidget(QWidget):
         return container
 
     def _label_layer_choices(self):
-        return [layer.name for layer in self.viewer.layers if isinstance(layer, napari.layers.Labels)]
+        return [layer.name for layer in self.viewer.layers if isinstance(layer, Labels)]
 
     def update_layer_combos(self):
         self.labels_combo.clear()
         self.intensity_combo.clear()
         self.intensity_combo.addItem("None")
         for layer in self.viewer.layers:
-            if isinstance(layer, napari.layers.Labels):
+            if isinstance(layer, Labels):
                 self.labels_combo.addItem(layer.name)
-            elif isinstance(layer, napari.layers.Image):
+            elif isinstance(layer, Image):
                 self.intensity_combo.addItem(layer.name)
 
     def calculate_properties(self):
@@ -216,13 +218,13 @@ class StatisticsWidget(QWidget):
 
         plt.figure()
         if plot_type == "Histogram":
-            if HAS_SEABORN:
-                sns.histplot(self.dataframe[column], kde=True)
+            if HAS_SEABORN and sns is not None:
+                sns.histplot(data=self.dataframe, x=column, kde=True)
             else:
                 plt.hist(self.dataframe[column].astype(float), bins=30, edgecolor="black", alpha=0.7)
             plt.title(f"Histogram of {column}")
         elif plot_type == "Box Plot":
-            if HAS_SEABORN:
+            if HAS_SEABORN and sns is not None:
                 sns.boxplot(y=self.dataframe[column])
             else:
                 plt.boxplot(self.dataframe[column].astype(float).dropna(), vert=True)
@@ -251,11 +253,10 @@ class StatisticsWidget(QWidget):
         features_a = self._resolve_features_from_labels(labels_layer_a)
         features_b = self._resolve_features_from_labels(labels_layer_b)
 
-        @thread_worker
-        def _worker() -> float:
+        def _compute() -> float:
             return compare_distributions_wasserstein(features_a, features_b, selected_cols)
 
-        worker = _worker()
+        worker = thread_worker(_compute)()  # type: ignore[call-arg]
         worker.returned.connect(
             lambda value: self.heterogeneity_status.setText(
                 f"Wasserstein (EMD^2) between {labels_layer_a} and {labels_layer_b}: {value:.5f}"
@@ -273,17 +274,16 @@ class StatisticsWidget(QWidget):
         labels_obj = self.viewer.layers[labels_layer]
         base_features = self._resolve_features_from_labels(labels_layer)
 
-        @thread_worker
-        def _worker() -> pd.DataFrame:
+        def _compute() -> pd.DataFrame:
             return identify_subpopulations_gmm(base_features, selected_cols, int(max_components))
 
         def _on_returned(result_df: pd.DataFrame) -> None:
-            labels_obj.features = result_df
+            setattr(labels_obj, "features", result_df)
             self.heterogeneity_status.setText(
                 f"Assigned Subpopulation_ID to {len(result_df)} objects on layer '{labels_layer}'"
             )
 
-        worker = _worker()
+        worker = thread_worker(_compute)()  # type: ignore[call-arg]
         worker.returned.connect(_on_returned)
         worker.errored.connect(
             lambda exc: self.heterogeneity_status.setText(

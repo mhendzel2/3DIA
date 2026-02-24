@@ -32,12 +32,12 @@ def test_mesh_curvatures() -> None:
     assert not result.empty
 
     expected_area = 4.0 * np.pi * radius**2
-    measured_area = float(result.loc[0, "surface_area"])
+    measured_area = float(np.asarray(result.iloc[0]["surface_area"], dtype=float))
     assert measured_area > 0
     assert abs(measured_area - expected_area) / expected_area < 0.45
 
-    gaussian_mean = float(result.loc[0, "gaussian_curvature_mean"])
-    gaussian_var = float(result.loc[0, "gaussian_curvature_variance"])
+    gaussian_mean = float(np.asarray(result.iloc[0]["gaussian_curvature_mean"], dtype=float))
+    gaussian_var = float(np.asarray(result.iloc[0]["gaussian_curvature_variance"], dtype=float))
     assert gaussian_mean > 0
     assert gaussian_var >= 0
 
