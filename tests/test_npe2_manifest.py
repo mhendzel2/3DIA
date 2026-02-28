@@ -45,6 +45,8 @@ def test_manifest_reader_patterns_include_zarr() -> None:
     patterns = set(readers[0]["filename_patterns"])
     assert "*.zarr" in patterns
     assert "*.ome.zarr" in patterns
+    assert "*.nd" in patterns
+    assert "*.htd" in patterns
     assert readers[0]["accepts_directories"] is True
 
 

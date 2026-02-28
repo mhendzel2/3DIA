@@ -82,6 +82,8 @@ contributions:
         - '*.czi'
         - '*.lif'
         - '*.nd2'
+        - '*.nd'
+        - '*.htd'
         - '*.oib'
         - '*.oif'
         - '*.tif'
